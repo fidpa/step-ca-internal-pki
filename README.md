@@ -191,7 +191,8 @@ step-ca-internal-pki/
 │   └── generic/          # nginx reverse proxy
 ├── monitoring/           # Prometheus metrics exporters
 │   ├── README.md         # Monitoring guide
-│   └── cert-exporter.sh  # Certificate expiry metrics
+│   ├── cert-exporter.sh  # Certificate expiry metrics
+│   └── check-time-sync.sh # NTP time synchronization validation
 ├── renewal/              # Auto-renewal scripts
 │   ├── README.md         # Renewal workflow
 │   └── renew-service-cert.sh
@@ -201,7 +202,9 @@ step-ca-internal-pki/
 ├── systemd/              # systemd templates
 │   ├── README.md         # Timer setup guide
 │   ├── step-ca-renew.service.template
-│   └── step-ca-renew.timer.template
+│   ├── step-ca-renew.timer.template
+│   ├── check-time-sync.service
+│   └── check-time-sync.timer
 ├── CONTRIBUTING.md       # Contribution guidelines
 ├── CODE_OF_CONDUCT.md    # Community standards
 ├── SECURITY.md           # Security policy
@@ -356,4 +359,4 @@ Built with [Smallstep step-ca](https://github.com/smallstep/certificates) - A li
 
 ---
 
-**Production-tested since December 2025** | 4 scripts | 6 core docs + 11 READMEs
+**Production-tested since December 2025** | 5 scripts | 6 core docs + 11 READMEs
