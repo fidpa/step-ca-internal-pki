@@ -1,0 +1,86 @@
+# Secrets & Credentials
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt.private
+*.gpg
+.env
+.env.secrets
+!*.example.env
+passwords.txt
+secrets.txt
+*.secret
+id_rsa
+id_ed25519
+id_ecdsa
+
+# step-ca runtime
+db/
+*.db
+*.db-shm
+*.db-wal
+
+# Test outputs
+test-output/
+test-results/
+*.scan
+
+# Local configs
+config.local
+local.conf
+*.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+
+# Editor files
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.vim/
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Git/Patch artifacts
+*.orig
+*.rej
+*.patch
+*.diff
+
+# Temporary files
+*.tmp
+/tmp/
+*.cache
+
+# Logs
+*.log
+logs/
+
+# Backups
+*.bak
+*.backup
+
+# Build artifacts
+*.o
+*.so
+
+# Personal/marketing content
+REDDIT_POST.md
+LINKEDIN_POST.md
+
+# rclone links and CLAUDE.md symlinks
+*.rclonelink
+CLAUDE.md

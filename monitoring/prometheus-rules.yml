@@ -1,0 +1,70 @@
+groups:
+  - name: step-ca
+    interval: 60s
+    rules:
+      # Service Certificate Alerts
+      - alert: StepCAServiceCertExpiringSoon
+        expr: step_ca_cert_days_remaining{type="service"} < 30
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Service certificate expiring soon"
+          description: "Certificate {{ $labels.service_name }} expires in {{ $value }} days (threshold: 30 days)"
+
+      - alert: StepCAServiceCertCritical
+        expr: step_ca_cert_days_remaining{type="service"} < 7
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service certificate expires in less than 7 days"
+          description: "Certificate {{ $labels.service_name }} expires in {{ $value }} days - URGENT renewal required"
+
+      - alert: StepCAServiceCertEmergency
+        expr: step_ca_cert_days_remaining{type="service"} < 1
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service certificate expires within 24 hours"
+          description: "Certificate {{ $labels.service_name }} expires in {{ $value }} days - IMMEDIATE action required"
+
+      # Intermediate CA Alerts
+      - alert: StepCAIntermediateExpiring
+        expr: step_ca_cert_days_remaining{type="intermediate"} < 90
+        for: 6h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Intermediate CA certificate expiring"
+          description: "Intermediate CA {{ $labels.cn }} expires in {{ $value }} days - Plan renewal"
+
+      # Root CA Alerts
+      - alert: StepCARootCAExpiring
+        expr: step_ca_cert_days_remaining{type="root"} < 365
+        for: 24h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Root CA certificate expiring within 1 year"
+          description: "Root CA {{ $labels.cn }} expires in {{ $value }} days - Plan rotation"
+
+      # Container Health
+      - alert: StepCAContainerDown
+        expr: step_ca_container_up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "step-ca container is down"
+          description: "step-ca Docker container has been down for 5 minutes"
+
+      # Metrics Staleness
+      - alert: StepCAMetricsStale
+        expr: time() - step_ca_scrape_timestamp_seconds > 7200
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "step-ca metrics not updating"
+          description: "Certificate metrics haven't updated in {{ $value | humanizeDuration }} (>2h threshold)"

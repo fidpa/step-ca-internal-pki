@@ -1,0 +1,30 @@
+# NTP Time Synchronization Check Timer
+# Part of step-ca-internal-pki
+#
+# Purpose: Hourly validation of system clock synchronization
+# Critical for PKI: clock drift causes certificate validation failures
+#
+# Installation:
+#   sudo cp check-time-sync.service /etc/systemd/system/
+#   sudo cp check-time-sync.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now check-time-sync.timer
+#
+# Verify:
+#   systemctl status check-time-sync.timer
+#   journalctl -u check-time-sync.service
+
+[Unit]
+Description=Hourly NTP Time Synchronization Check for step-ca PKI
+Documentation=https://github.com/fidpa/step-ca-internal-pki
+
+[Timer]
+# Run hourly
+OnCalendar=hourly
+# Randomize start within 5 minutes to avoid thundering herd
+RandomizedDelaySec=300
+# Run immediately if system was off during scheduled time
+Persistent=true
+
+[Install]
+WantedBy=timers.target

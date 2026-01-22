@@ -1,0 +1,62 @@
+services:
+  nextcloud:
+    image: nextcloud:latest
+    container_name: nextcloud
+    restart: unless-stopped
+    environment:
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=changeme  # CHANGE THIS
+      - MYSQL_HOST=db
+      - NEXTCLOUD_ADMIN_USER=admin
+      - NEXTCLOUD_ADMIN_PASSWORD=changeme  # CHANGE THIS
+      - NEXTCLOUD_TRUSTED_DOMAINS=nextcloud.internal
+      - OVERWRITEPROTOCOL=https
+      - OVERWRITEHOST=nextcloud.internal
+    volumes:
+      - nextcloud_data:/var/www/html
+    networks:
+      - nextcloud-net
+    depends_on:
+      - db
+
+  db:
+    image: mariadb:10.11
+    container_name: nextcloud-db
+    restart: unless-stopped
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW --innodb-file-per-table=1
+    environment:
+      - MYSQL_ROOT_PASSWORD=changeme  # CHANGE THIS
+      - MYSQL_PASSWORD=changeme  # MUST MATCH NEXTCLOUD PASSWORD
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+    volumes:
+      - nextcloud_db:/var/lib/mysql
+    networks:
+      - nextcloud-net
+
+  nginx:
+    image: nginx:alpine
+    container_name: nextcloud-nginx
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/ssl/step-ca/nextcloud.crt:/etc/nginx/ssl/cert.crt:ro
+      - /etc/ssl/step-ca/nextcloud-fullchain.crt:/etc/nginx/ssl/fullchain.crt:ro
+      - /etc/ssl/step-ca/nextcloud.key:/etc/nginx/ssl/cert.key:ro
+      - nextcloud_data:/var/www/html:ro
+    networks:
+      - nextcloud-net
+    depends_on:
+      - nextcloud
+
+volumes:
+  nextcloud_data:
+  nextcloud_db:
+
+networks:
+  nextcloud-net:
+    driver: bridge

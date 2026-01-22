@@ -1,0 +1,34 @@
+# NTP Time Synchronization Check Service
+# Part of step-ca-internal-pki
+#
+# Purpose: Validate system clock synchronization for PKI operations
+# Run via: systemd timer (check-time-sync.timer)
+#
+# Installation:
+#   sudo cp check-time-sync.service /etc/systemd/system/
+#   sudo cp check-time-sync.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now check-time-sync.timer
+
+[Unit]
+Description=step-ca NTP Time Synchronization Check
+Documentation=https://github.com/fidpa/step-ca-internal-pki
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/check-time-sync.sh
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=step-ca-time-sync
+
+[Install]
+WantedBy=multi-user.target

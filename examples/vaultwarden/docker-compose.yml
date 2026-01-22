@@ -1,0 +1,38 @@
+services:
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    restart: unless-stopped
+    environment:
+      - DOMAIN=https://vaultwarden.internal
+      - SIGNUPS_ALLOWED=false
+      - INVITATIONS_ALLOWED=true
+      - SMTP_HOST=smtp.example.com
+      - SMTP_FROM=vaultwarden@example.com
+      - SMTP_PORT=587
+      - SMTP_SECURITY=starttls
+    volumes:
+      - ./data:/data
+    networks:
+      - web
+
+  nginx:
+    image: nginx:alpine
+    container_name: vaultwarden-nginx
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/ssl/step-ca/vaultwarden.crt:/etc/nginx/ssl/cert.crt:ro
+      - /etc/ssl/step-ca/vaultwarden-fullchain.crt:/etc/nginx/ssl/fullchain.crt:ro
+      - /etc/ssl/step-ca/vaultwarden.key:/etc/nginx/ssl/cert.key:ro
+    networks:
+      - web
+    depends_on:
+      - vaultwarden
+
+networks:
+  web:
+    driver: bridge

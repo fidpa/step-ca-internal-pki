@@ -1,0 +1,49 @@
+# Generic Service with nginx TLS Termination Template
+#
+# Replace PLACEHOLDERS before use:
+#   SERVICE_NAME - Your service name (e.g., myservice)
+#   SERVICE_IMAGE - Docker image for your service
+#   BACKEND_PORT - Internal port your service listens on
+#
+# Usage:
+#   1. Copy this file and nginx.conf to your project
+#   2. Replace all PLACEHOLDERS
+#   3. Request certificate: sudo ../cert-request-template.sh
+#   4. Run: docker compose up -d
+
+services:
+  # Your backend service
+  SERVICE_NAME:
+    image: SERVICE_IMAGE
+    container_name: SERVICE_NAME
+    restart: unless-stopped
+    # Add your service-specific configuration here:
+    # environment:
+    #   - CONFIG_VAR=value
+    # volumes:
+    #   - ./data:/data
+    networks:
+      - internal
+
+  # nginx TLS termination
+  nginx:
+    image: nginx:alpine
+    container_name: SERVICE_NAME-nginx
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # Mount step-ca certificates
+      - /etc/ssl/step-ca/SERVICE_NAME.crt:/etc/nginx/ssl/cert.crt:ro
+      - /etc/ssl/step-ca/SERVICE_NAME.key:/etc/nginx/ssl/cert.key:ro
+      - /etc/ssl/step-ca/SERVICE_NAME-fullchain.crt:/etc/nginx/ssl/fullchain.crt:ro
+    depends_on:
+      - SERVICE_NAME
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge

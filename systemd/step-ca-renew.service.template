@@ -1,0 +1,29 @@
+[Unit]
+Description=Renew step-ca Service Certificate
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+
+# CONFIGURE THESE ENVIRONMENT VARIABLES:
+Environment="SERVICE_NAME=myservice"
+Environment="SERVICE_RELOAD_CMD=systemctl reload nginx"
+
+# Optional overrides:
+# Environment="STEP_CA_HOME=/opt/step-ca"
+# Environment="STEP_CA_CERT_DIR=/etc/ssl/step-ca"
+# Environment="RENEWAL_THRESHOLD=30"
+
+ExecStart=/usr/local/bin/renew-service-cert.sh
+
+# Security
+User=root
+PrivateTmp=true
+ProtectSystem=strict
+# /opt/step-ca/certs needed for intermediate_ca.srl (serial file)
+ReadWritePaths=/etc/ssl/step-ca /var/log /opt/step-ca/certs
+
+# Restart behavior
+Restart=on-failure
+RestartSec=300

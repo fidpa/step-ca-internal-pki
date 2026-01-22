@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily step-ca Certificate Renewal Check
+Documentation=https://github.com/fidpa/step-ca-internal-pki
+
+[Timer]
+OnCalendar=daily
+OnBootSec=10min
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,58 @@
+services:
+  step-ca:
+    image: smallstep/step-ca:0.29.0  # Pinned version (updated: 2026-01-21)
+    container_name: step-ca
+    restart: unless-stopped
+
+    # Ports
+    # CUSTOMIZE if conflicts exist:
+    # - 9200: HTTP-01 challenges (ACME)
+    # - 9643: HTTPS Admin API
+    #
+    # Option 1: Bind to all interfaces (simple)
+    ports:
+      - "9200:9000"  # HTTP-01 challenges
+      - "9643:9443"  # HTTPS Admin API
+
+    # Option 2: Bind to specific IPs (advanced)
+    # Replace YOUR_IP with your server IP
+    # ports:
+    #   - "YOUR_IP:9200:9000"
+    #   - "YOUR_IP:9643:9443"
+
+    # Volumes
+    volumes:
+      - /opt/step-ca/config:/home/step/config:ro
+      - /opt/step-ca/db:/home/step/db
+      - /opt/step-ca/certs:/home/step/certs:ro
+      - /opt/step-ca/secrets:/home/step/secrets:ro
+
+    # Environment
+    # NOTE: No DOCKER_STEPCA_INIT_* variables - CA must be manually configured
+    #       via /opt/step-ca/config/ca.json before first start (see docs/SETUP.md)
+    environment: {}
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "step", "ca", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Security
+    user: "1000:1000"  # Ensure volumes are owned by this UID/GID
+    read_only: true     # Container filesystem read-only (volumes remain writable)
+    tmpfs:
+      - /tmp
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  default:
+    driver: bridge
