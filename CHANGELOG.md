@@ -14,6 +14,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Grafana dashboard templates for certificate expiry visualization
 - mTLS examples for service-to-service authentication
 
+## [1.2.0] - 2026-05-13
+
+### Added — Real-World Migration Lessons
+
+Lessons collected while deploying step-ca alongside an existing Let's Encrypt + acme-dns + Tailscale + Active Directory stack. All additions are environment-neutral (no organization-specific identifiers).
+
+- **`scripts/` directory** with three battle-tested scripts (replace previously manual command sequences):
+  - `scripts/create-root-ca.sh` — Offline Root CA creation with air-gap verification, decrypt-verify, cross-platform secure-delete (shred/gshred/`rm -P`), and cleanup trap on script abort
+  - `scripts/generate-intermediate-csr.sh` — Server-side Intermediate key + CSR generation with ENV-configurable Subject
+  - `scripts/sign-intermediate-ca.sh` — USB-driven offline signing with input validation and chain verification
+- **`docs/COEXISTENCE.md` (new)** — Four patterns for running step-ca alongside acme-dns (port 53 conflict), Tailscale/WireGuard MagicDNS, Windows Active Directory DNS, and multi-site deployments.
+
+### Fixed — Setup Bug
+
+- **`docs/SETUP.md` Phase 3**: Documented the **`/home/step/secrets/password` file requirement**. step-ca always tries to read this file at startup, even when the intermediate key is unencrypted — without it the container restart-loops with `error reading /home/step/secrets/password: no such file or directory`. Now Phase 3 Step 3 instructs creating an empty (or passphrase-filled) password file. Also added to `docs/TROUBLESHOOTING.md`.
+
+### Added — TROUBLESHOOTING.md
+
+- **DNS / Network Coexistence Issues** (new section):
+  - Port 53 conflicts with acme-dns / PiHole / AdGuard / dnsmasq — three resolution strategies
+  - dnsmasq breaking Tailscale MagicDNS (via implicit binding to VPN interfaces) — `bind-interfaces` + explicit `listen-address=` fix
+  - `stop-dns-rebind` filtering legitimate private IPs from AD-DNS — `rebind-domain-ok=` whitelist
+- **Container Restart-Loop with `password` Error** (new troubleshooting entry)
+- **Container Health Check Stuck "starting"** (new entry) — explains why the `step ca health` healthcheck stays in "starting" without bootstrapping, plus two solutions
+
+### Added — Other Docs
+
+- **`docs/SETUP.md` Prerequisites**: Brew-PATH note for macOS non-login shells (Cron / SSH) — `step` / `gpg` are not in `$PATH` without prepending `/opt/homebrew/bin`.
+- **`docs/BACKUP.md`**: USB-Stick formatting alternative — exFAT (cross-platform Linux ↔ macOS) when LUKS isn't suitable. Documents the **11-character exFAT label limit** and **macOS `._<filename>` AppleDouble sidecars**.
+- **`systemd/README.md`**: Hardening section explaining the `ReadWritePaths=` requirement when combining `ProtectSystem=strict` with state-file-writing helpers. Includes drop-in example to avoid silent `Read-only file system` failures.
+
 ## [1.1.0] - 2026-01-21
 
 ### Added

@@ -37,10 +37,31 @@ Offline Root CA (10 Jahre) erstellen → Intermediate CA generieren → step-ca 
 
 ## Prerequisites
 
+### On the production server
+
 - Docker & Docker Compose
 - OpenSSL 1.1.1+
 - Root access
-- Offline machine (recommended for Root CA creation)
+
+### On the air-gapped machine (Root CA creation)
+
+- `step` CLI ≥ 0.25 — `brew install step` (macOS) or [smallstep.com/docs](https://smallstep.com/docs/step-cli/installation)
+- `gpg` ≥ 2.2 — `brew install gnupg` (macOS) or `apt install gnupg` (Linux)
+- `coreutils` (macOS only, for stronger `shred`) — `brew install coreutils`
+
+> **macOS note — Brew PATH in non-login shells**: Homebrew installs to `/opt/homebrew/bin` (Apple Silicon) or `/usr/local/bin` (Intel). Non-login SSH sessions and cron jobs don't source `~/.zshrc`, so `step` / `gpg` won't be found unless you prepend the brew path:
+> ```bash
+> export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+> ```
+> The shipped scripts in `scripts/` do this automatically.
+
+### Recommended: use the provided scripts
+
+This guide walks through the commands manually for transparency. If you'd rather use battle-tested scripts with built-in air-gap verification, decrypt-verification, and secure-delete cleanup, see [`scripts/README.md`](../scripts/README.md):
+
+- `scripts/create-root-ca.sh` — replaces Phase 1 (manual commands below)
+- `scripts/generate-intermediate-csr.sh` — replaces Phase 2 Steps 1–2
+- `scripts/sign-intermediate-ca.sh` — replaces Phase 2 Step 3
 
 ---
 
@@ -276,7 +297,25 @@ EOF
 
 **Note**: CRL configuration is omitted in this setup because certificates are signed via **Offline CA** (direct OpenSSL). step-ca cannot generate CRLs for certificates not registered in its database. For revocation, see `docs/ARCHITECTURE.md § Revocation Process`.
 
-### Step 3: Deploy Docker Container
+### Step 3: Create Password File (required even for unencrypted keys)
+
+⚠️ **CRITICAL**: step-ca's startup expects a password file at `/home/step/secrets/password` to unlock the intermediate CA key. If the key is unencrypted (as in this guide), the file must still exist but can be empty. Otherwise the container restart-loops with:
+
+```
+error reading /home/step/secrets/password: open /home/step/secrets/password: no such file or directory
+```
+
+```bash
+# Create empty password file (key is unencrypted)
+sudo install -o 1000 -g 1000 -m 600 /dev/null /opt/step-ca/secrets/password
+
+# OR: if you encrypted the intermediate key with a passphrase:
+# echo -n 'your-passphrase' | sudo install -o 1000 -g 1000 -m 600 /dev/stdin /opt/step-ca/secrets/password
+```
+
+> **Security trade-off**: An unencrypted intermediate key with an empty password file means the key is protected only by filesystem permissions. For higher security, encrypt the intermediate key with `openssl ec -aes-256-cbc` and store the passphrase in the password file. See `docs/ARCHITECTURE.md § Security Boundaries`.
+
+### Step 4: Deploy Docker Container
 
 ```bash
 # Use provided docker-compose template

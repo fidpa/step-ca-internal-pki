@@ -12,6 +12,7 @@ Symptom → Ursache → Lösung Format. Häufigste Probleme: Certificate Verific
 
 - [Certificate Issues](#certificate-issues)
 - [step-ca Container Issues](#step-ca-container-issues)
+- [DNS / Network Coexistence Issues](#dns--network-coexistence-issues)
 - [Auto-Renewal Issues](#auto-renewal-issues)
 - [nginx/Service Integration Issues](#nginxservice-integration-issues)
 - [Monitoring Issues](#monitoring-issues)
@@ -29,9 +30,14 @@ Symptom → Ursache → Lösung Format. Häufigste Probleme: Certificate Verific
 | `certificate has expired` | Auto-renewal timer disabled | [Certificate Expired](#certificate-expired) |
 | `certificate is valid for X, not Y` | Wrong SANs configured | [Wrong SANs](#wrong-sans-in-certificate) |
 | Container won't start | Port conflicts or permissions | [Container Not Starting](#container-not-starting) |
+| `error reading /home/step/secrets/password` | Empty `password` file missing | [Container Restart-Loop](#container-restart-loop-with-password-error) |
+| Container `health: starting` forever | Healthcheck needs `step ca bootstrap` | [Health Check Stuck](#container-health-check-stuck-starting-but-service-is-up) |
 | Health check fails | Container not listening | [Health Check Fails](#health-check-fails) |
 | nginx won't start | Certificate file missing/wrong permissions | [nginx Won't Start](#nginx-wont-start) |
 | Metrics not updating | Exporter timer disabled | [Metrics Not Updating](#metrics-not-updating) |
+| Port 53 already in use | acme-dns/PiHole/dnsmasq conflict | [Port 53 Conflicts](#port-53-already-in-use-acme-dns-pihole-adguard-dnsmasq) |
+| Tailscale MagicDNS broken | dnsmasq binding to tailscale interface | [dnsmasq Breaks Tailscale](#dnsmasq-breaks-tailscale-magicdns-or-other-vpn-dns) |
+| Internal DNS returns empty answers | `stop-dns-rebind` strips private IPs | [DNS Rebind Protection](#dnsmasq-blocks-private-ips-in-responses-stop-dns-rebind) |
 
 ---
 
@@ -151,6 +157,33 @@ jq . /opt/step-ca/config/ca.json
 
 ---
 
+### Container Restart-Loop with `password` Error
+
+**Symptom:**
+```bash
+docker logs step-ca
+# error reading /home/step/secrets/password: open /home/step/secrets/password: no such file or directory
+# (repeats indefinitely)
+```
+
+**Cause**: step-ca's startup always tries to read a password file to unlock the intermediate CA key — even when the key itself is unencrypted on disk.
+
+**Solution:**
+```bash
+# Create EMPTY password file (key is unencrypted on disk):
+sudo install -o 1000 -g 1000 -m 600 /dev/null /opt/step-ca/secrets/password
+
+# OR: if the intermediate key was encrypted with a passphrase:
+echo -n 'your-passphrase' | sudo install -o 1000 -g 1000 -m 600 /dev/stdin /opt/step-ca/secrets/password
+
+# Restart container
+docker restart step-ca
+```
+
+> See `docs/SETUP.md` Phase 3 Step 3 for the same note in the setup flow.
+
+---
+
 ### Health Check Fails
 
 **Symptom:**
@@ -169,6 +202,127 @@ docker restart step-ca
 
 # Check firewall
 sudo ufw status | grep 9643
+```
+
+---
+
+### Container Health Check Stuck "starting" (but service is up)
+
+**Symptom:** `docker ps` shows `(health: starting)` indefinitely, but `curl -k https://localhost:9643/health` returns `{"status":"ok"}`.
+
+**Cause**: The default healthcheck (`step ca health`) needs `step ca bootstrap` to have run inside the container to register the CA URL + fingerprint. For installations using the OpenSSL signing workflow (no bootstrap), the healthcheck stays in "starting" but is harmless.
+
+**Solutions** (pick one):
+
+```bash
+# Option A: Bootstrap step inside the container (one-time)
+ROOT_FINGERPRINT=$(step certificate fingerprint /opt/step-ca/certs/root_ca.crt)
+docker exec step-ca step ca bootstrap \
+    --ca-url https://localhost:9443 \
+    --fingerprint "$ROOT_FINGERPRINT"
+
+# Option B: Override the healthcheck with a simpler curl in docker-compose.yml:
+# healthcheck:
+#   test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost:9443/health || exit 1"]
+```
+
+---
+
+## DNS / Network Coexistence Issues
+
+### Port 53 Already in Use (acme-dns, PiHole, AdGuard, dnsmasq)
+
+**Symptom:** When deploying a DNS resolver alongside step-ca's PKI infrastructure (e.g. for `*.internal` resolution), another service already occupies port 53.
+
+```bash
+sudo ss -lntup | grep ':53\b'
+# Example: 0.0.0.0:53  -> acme-dns container, or PiHole, or dnsmasq
+```
+
+**Three strategies (pick by your stack):**
+
+#### Strategy A: Move the existing DNS service to an alternative port
+
+Best when the existing service is reached only from a fixed upstream (e.g. an external port-forwarding rule for acme-dns DNS-01 validation).
+
+```yaml
+# docker-compose.yml of the existing service (example: acme-dns):
+ports:
+  - "0.0.0.0:5343:53/tcp"   # was "0.0.0.0:53:53/tcp"
+  - "0.0.0.0:5343:53/udp"
+```
+
+Then update the upstream:
+- Router NAT port-forward: external `53/tcp+udp` → internal `5343/tcp+udp`
+- Or: external resolvers configured to query `IP:5343`
+
+#### Strategy B: Bind your new DNS resolver to a specific interface
+
+Best when both services need to listen on port 53 but on different interfaces (e.g. LAN-only vs. tunnel-only).
+
+```conf
+# dnsmasq config (only listens on LAN-IP + loopback, not 0.0.0.0):
+listen-address=192.0.2.5,127.0.0.1
+bind-interfaces
+```
+
+> **Critical**: Without `bind-interfaces`, dnsmasq listens on ALL interfaces including any VPN-side interface — which can break upstream DNS proxies (e.g. Tailscale MagicDNS on 100.100.100.100).
+
+#### Strategy C: Source-based DNAT (advanced)
+
+Route DNS queries from LAN to one service, from WAN to another. Complex; only worth it if neither A nor B fit.
+
+---
+
+### dnsmasq Breaks Tailscale MagicDNS (or other VPN DNS)
+
+**Symptom:** After starting dnsmasq, `dig @100.100.100.100 example.com` times out. Tailscale-managed `/etc/resolv.conf` no longer resolves anything.
+
+**Cause:** dnsmasq's default behavior (`bind-dynamic` or `bind-interfaces` with `listen-address=` missing) binds to every interface — including the Tailscale-assigned IP on `tailscale0`. dnsmasq then intercepts queries that should reach `tailscaled`'s internal MagicDNS resolver.
+
+**Logs to confirm:**
+```
+dnsmasq[NNNN]: LOUD WARNING: listening on 100.x.x.x may accept requests via interfaces other than tailscale0
+```
+
+**Solution:**
+```conf
+# /etc/dnsmasq.d/local.conf
+listen-address=192.0.2.5,127.0.0.1   # LAN-IP + loopback ONLY
+bind-interfaces                       # do not auto-bind to other interfaces
+```
+
+After change: `sudo systemctl restart dnsmasq` and verify Tailscale DNS still works:
+```bash
+dig @100.100.100.100 example.com +short   # must return an answer
+```
+
+---
+
+### dnsmasq Blocks Private IPs in Responses (`stop-dns-rebind`)
+
+**Symptom:** Forward to an upstream DNS server that legitimately returns private IPs (e.g. an Active Directory DNS responding with `192.168.x.x` for internal hostnames) returns empty answers via dnsmasq, but works when querying the upstream directly.
+
+```bash
+# Direct upstream — works:
+dig @192.168.1.10 dc.corp.local +short
+# 192.168.1.10
+
+# Via dnsmasq — empty:
+dig @127.0.0.1 dc.corp.local +short
+# (nothing)
+```
+
+**Cause**: dnsmasq's `stop-dns-rebind` (DNS rebinding protection) strips RFC1918 IPs from responses by default.
+
+**Solution**: Whitelist the internal domain(s):
+
+```conf
+# /etc/dnsmasq.d/local.conf
+stop-dns-rebind
+rebind-localhost-ok
+rebind-domain-ok=/corp.local/
+rebind-domain-ok=/internal/
 ```
 
 ---

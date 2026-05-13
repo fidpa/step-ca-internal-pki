@@ -1,6 +1,6 @@
 # step-ca Internal PKI
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Linux-lightgrey?logo=linux)
 ![Bash](https://img.shields.io/badge/Bash-4.0%2B-blue?logo=gnu-bash)
@@ -17,6 +17,7 @@ Production-ready PKI (Public Key Infrastructure) setup with [Smallstep's step-ca
 ## Features
 
 - **Two-Tier PKI** - Offline Root CA + Online Intermediate CA for enhanced security
+- **Battle-Tested Scripts** - Air-gap verification, decrypt-verify, cleanup-trap, cross-platform secure-delete (`scripts/`)
 - **Auto-Renewal** - systemd timers for automatic certificate renewal (30-day threshold)
 - **Prometheus Monitoring** - Certificate expiry metrics and alerts
 - **Service Integration** - Examples for Vaultwarden, Nextcloud, Portainer, nginx
@@ -24,6 +25,7 @@ Production-ready PKI (Public Key Infrastructure) setup with [Smallstep's step-ca
 - **Client Trust** - Cross-platform Root CA installation (macOS, Linux, Windows)
 - **Atomic Deployment** - Race-condition-free certificate deployment with flock locking
 - **NTP Monitoring** - Time synchronization validation (critical for certificate validity)
+- **Coexistence Patterns** - Documented integration with acme-dns, Tailscale/WireGuard MagicDNS, Active Directory DNS ([`docs/COEXISTENCE.md`](docs/COEXISTENCE.md))
 - **Production-Tested** - Scripts and configs battle-tested in production
 
 ## ⚠️ Known Limitations
@@ -46,30 +48,71 @@ cd step-ca-internal-pki
 
 ### Prerequisites
 
+**Production server:**
 - Docker & Docker Compose
 - OpenSSL
 - Root access for certificate deployment
 
-### 1. Set up step-ca
+**Air-gapped machine (Root CA + Intermediate signing):**
+- `step` CLI ≥ 0.25 — `brew install step` (macOS) or [smallstep.com/docs](https://smallstep.com/docs/step-cli/installation)
+- `gpg` ≥ 2.2 — `brew install gnupg` / `apt install gnupg`
+- `coreutils` (macOS only, for stronger `shred`) — `brew install coreutils`
+
+> **macOS Brew-PATH gotcha**: Non-login SSH sessions and cron jobs don't auto-source `~/.zshrc`. The provided scripts prepend `/opt/homebrew/bin:/usr/local/bin` to `$PATH` automatically.
+
+### 1. Create Root CA (Offline, on air-gapped machine)
 
 ```bash
-# Create step-ca directories
-mkdir -p /opt/step-ca/{certs,secrets,config,db}
+# Run on air-gapped laptop (Wi-Fi off, Ethernet unplugged, VPN disconnected).
+# Script aborts if it detects network connectivity.
+CA_NAME="My Internal Root CA 2026" ./scripts/create-root-ca.sh
 
-# Deploy step-ca container (see config/step-ca-stack.yml)
-docker compose -f config/step-ca-stack.yml up -d
+# Output: ~/.ca-creation-YYYYMMDD-HHMMSS/
+#   - root_ca.crt           → copy to production server
+#   - root_ca.key.gpg       → keep on USB stick in safe (3-2-1 rule)
+#   - checksums.sha256
 ```
 
-### 2. Create Root CA (Offline)
+### 2. Generate Intermediate CSR (on production server)
 
 ```bash
-# Generate offline Root CA (air-gapped recommended)
-# See docs/SETUP.md for detailed instructions
+INTERMEDIATE_CN="My Internal Intermediate CA 2026" \
+INTERMEDIATE_O="My Org" \
+INTERMEDIATE_C="DE" \
+  ./scripts/generate-intermediate-csr.sh
 
-# Store Root CA securely (multiple backups!)
+# Output:
+#   /opt/step-ca/secrets/intermediate_ca_key   (ECDSA P-256)
+#   /tmp/intermediate_ca.csr                   → transport to air-gapped machine
 ```
 
-### 3. Request Service Certificate
+### 3. Sign Intermediate (back on air-gapped machine)
+
+```bash
+# Insert USB with root_ca.crt, root_ca.key.gpg, intermediate_ca.csr
+USB_MOUNT="/Volumes/USB" ./scripts/sign-intermediate-ca.sh
+
+# Output written to USB:
+#   intermediate_ca.crt      → transport back to production server
+```
+
+### 4. Deploy step-ca
+
+```bash
+# Install signed intermediate + create empty password file (REQUIRED, see Phase 3 docs)
+sudo install -o 1000 -g 1000 -m 644 intermediate_ca.crt /opt/step-ca/certs/
+sudo install -o 1000 -g 1000 -m 600 /dev/null /opt/step-ca/secrets/password
+
+# Trust Root CA on the server
+sudo install -m 644 root_ca.crt /usr/local/share/ca-certificates/my-internal-root-ca.crt
+sudo update-ca-certificates
+
+# Deploy container
+cd /opt/step-ca && docker compose -f step-ca-stack.yml up -d
+curl -k https://localhost:9643/health   # → {"status":"ok"}
+```
+
+### 5. Request Service Certificate
 
 ```bash
 # Customize the template for your service
@@ -81,7 +124,7 @@ sudo /tmp/myservice-cert-request.sh
 # Output: /etc/ssl/step-ca/myservice.{crt,key} + myservice-fullchain.crt
 ```
 
-### 4. Configure Auto-Renewal
+### 6. Configure Auto-Renewal
 
 ```bash
 # Install systemd timer
@@ -93,7 +136,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now myservice-renew.timer
 ```
 
-### 5. Set up Monitoring (Optional)
+### 7. Set up Monitoring (Optional)
 
 ```bash
 # Install cert-exporter
@@ -174,14 +217,20 @@ step-ca-internal-pki/
 ├── config/               # Docker Compose stack configuration
 │   ├── README.md         # Configuration guide
 │   └── step-ca-stack.yml # step-ca container deployment
-├── docs/                 # Documentation (6 guides)
+├── scripts/              # Battle-tested PKI lifecycle scripts (v1.2.0+)
+│   ├── README.md         # Scripts overview + workflow diagram
+│   ├── create-root-ca.sh           # Offline Root CA (air-gap verified)
+│   ├── generate-intermediate-csr.sh # Server-side Intermediate key + CSR
+│   └── sign-intermediate-ca.sh     # Offline Intermediate signing
+├── docs/                 # Documentation (7 guides)
 │   ├── README.md         # Navigation hub
 │   ├── SETUP.md          # Installation guide
 │   ├── ARCHITECTURE.md   # PKI design decisions
 │   ├── CLIENT_TRUST.md   # Cross-platform Root CA installation
 │   ├── NGINX_TLS.md      # nginx TLS termination
+│   ├── COEXISTENCE.md    # Integration with acme-dns, Tailscale, AD-DNS (v1.2.0+)
 │   ├── BACKUP.md         # 3-2-1 backup strategy
-│   └── TROUBLESHOOTING.md# Common issues
+│   └── TROUBLESHOOTING.md# Common issues + DNS coexistence pitfalls
 ├── examples/             # Service integration examples
 │   ├── README.md         # Examples overview
 │   ├── cert-request-template.sh
@@ -200,7 +249,7 @@ step-ca-internal-pki/
 │   ├── README.md         # Revocation guide
 │   └── revoke-cert.sh
 ├── systemd/              # systemd templates
-│   ├── README.md         # Timer setup guide
+│   ├── README.md         # Timer setup + ReadWritePaths hardening
 │   ├── step-ca-renew.service.template
 │   ├── step-ca-renew.timer.template
 │   ├── check-time-sync.service
@@ -244,11 +293,12 @@ Each example includes:
 | [SETUP.md](docs/SETUP.md) | Complete installation guide |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | PKI design decisions |
 | [CLIENT_TRUST.md](docs/CLIENT_TRUST.md) | Cross-platform Root CA installation |
+| [COEXISTENCE.md](docs/COEXISTENCE.md) | Integration with acme-dns / Tailscale / AD-DNS |
 | [BACKUP.md](docs/BACKUP.md) | 3-2-1 backup strategy |
 | [NGINX_TLS.md](docs/NGINX_TLS.md) | nginx TLS termination |
 | [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common issues |
 
-📚 **Recommended reading order**: SETUP → ARCHITECTURE → CLIENT_TRUST → NGINX_TLS → BACKUP → TROUBLESHOOTING
+📚 **Recommended reading order**: SETUP → ARCHITECTURE → CLIENT_TRUST → COEXISTENCE → NGINX_TLS → BACKUP → TROUBLESHOOTING
 
 ## vs. Alternatives
 
@@ -265,6 +315,8 @@ Each example includes:
 - **Multi-Service** - Tested with 6+ services (Vaultwarden, Nextcloud, etc.)
 - **Monitoring** - Prometheus alerts, Grafana dashboards
 - **Client Trust** - Cross-platform automation
+- **Coexistence** - Documented patterns for living next to acme-dns / Tailscale / AD-DNS
+- **Air-Gap Safety** - Scripts verify offline state before touching the Root key
 - **CRL Architecture** - Certificate revocation support
 
 ## Requirements
@@ -359,4 +411,4 @@ Built with [Smallstep step-ca](https://github.com/smallstep/certificates) - A li
 
 ---
 
-**Production-tested since December 2025** | 5 scripts | 6 core docs + 11 READMEs
+**Production-tested since December 2025** | v1.2.0 (May 2026) | 8 scripts | 7 core docs + 12 READMEs

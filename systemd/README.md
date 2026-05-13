@@ -114,6 +114,31 @@ journalctl -u step-ca-renew-myservice.service --since "1 hour ago"
 openssl x509 -in /etc/ssl/step-ca/myservice.crt -noout -enddate
 ```
 
+## Security Hardening — `ReadWritePaths` Caveat
+
+If your service template uses `ProtectSystem=strict` for sandboxing, **every directory the renewal script writes to must be listed under `ReadWritePaths=`** — otherwise filesystem writes fail with `Read-only file system` even for the script's own user.
+
+Common paths the renewal script writes to:
+
+| Path | What's written | Required when |
+|------|----------------|----------------|
+| `/etc/ssl/step-ca/` | New service certificate + key | Always |
+| `/run/<your-state-dir>/` | Alert cooldown state files | If you use alert-throttling helpers |
+| `/var/log/<your-log>/` | Custom log file | If `StandardOutput=append:...` |
+
+**Example drop-in**: `/etc/systemd/system/step-ca-renew-myservice.service.d/paths.conf`
+
+```ini
+[Service]
+ReadWritePaths=/etc/ssl/step-ca
+ReadWritePaths=/run/myproject-state
+# Add any custom log directory here too
+```
+
+After creating the drop-in: `sudo systemctl daemon-reload`.
+
+> **Real-world bug**: Without `ReadWritePaths`, an alert helper that writes a cooldown state file to `/run/...` would silently fail to throttle and could spam emails every cron interval. Always test the renewal once manually (`systemctl start step-ca-renew-myservice.service`) and inspect logs for `Read-only file system`.
+
 ## See Also
 
 - [← Back to Root](../README.md)

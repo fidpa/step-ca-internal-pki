@@ -112,9 +112,9 @@ sha256sum root-ca-backup-*.tar.gz > checksums.txt
 
 #### Storage Locations
 
-**Copy 1: USB Drive (encrypted)**
+**Copy 1: USB Drive (encrypted, Linux-only access)**
 ```bash
-# LUKS-encrypted USB drive
+# LUKS-encrypted USB drive — strongest option, but Linux-only
 cryptsetup luksFormat /dev/sdX
 cryptsetup open /dev/sdX root_ca_backup
 mkfs.ext4 /dev/mapper/root_ca_backup
@@ -123,6 +123,24 @@ cp root-ca-backup-*.tar.gz /mnt/usb/
 umount /mnt/usb
 cryptsetup close root_ca_backup
 ```
+
+**Copy 1 alternative: USB Drive (exFAT, cross-platform)**
+
+If the same USB stick must be readable from both Linux and macOS (e.g. signing on a Mac, restoring on a Linux server), prefer **exFAT** over LUKS. The backup file is already GPG-encrypted, so filesystem-level encryption is redundant.
+
+```bash
+# Linux — format USB as exFAT
+sudo apt install exfatprogs
+sudo wipefs -a /dev/sdX
+sudo sgdisk --zap-all /dev/sdX
+sudo sgdisk -n 1:0:0 -t 1:0700 -c 1:"PKI Backup" /dev/sdX
+sudo mkfs.exfat -L "PKI-BACKUP" /dev/sdX1   # ⚠ Label max 11 chars (exFAT limit)
+```
+
+**Pitfalls:**
+- **exFAT label limit is 11 characters** — `mkfs.exfat` errors out with `input string is too long` otherwise.
+- **macOS creates `._<filename>` AppleDouble files** when writing to exFAT/FAT — harmless metadata sidecars, ignored by `step` / `openssl` / `gpg`. Don't confuse them with the real files.
+- **exFAT has no Unix permissions** — `chmod`/`chown` are no-ops on the volume. The backup file itself is GPG-encrypted, so this is acceptable, but never use exFAT for storing unencrypted secrets.
 
 **Copy 2: Paper Backup (for key recovery)**
 ```bash
