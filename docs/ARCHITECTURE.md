@@ -4,7 +4,7 @@ Design decisions and architecture for the step-ca two-tier PKI implementation.
 
 ## ⚡ TL;DR
 
-Two-tier PKI: Offline Root CA (10y Gültigkeit) → Online Intermediate CA (5y) → automatische Service-Zertifikate (90d). Air-gapped Root für maximale Sicherheit.
+Two-tier PKI: offline Root CA (10-year validity) → online Intermediate CA (5y) → automated service certificates (90d). Air-gapped Root for maximum security. Two offline sessions required for initial setup (see [Why Two Offline Sessions?](#why-two-offline-sessions)).
 
 ---
 
@@ -49,6 +49,7 @@ To "revoke" a compromised certificate:
 - [Overview](#overview)
 - [Certificate Hierarchy](#certificate-hierarchy)
 - [Why Two-Tier?](#why-two-tier)
+- [Why Two Offline Sessions?](#why-two-offline-sessions)
 - [Trust Anchor Distribution](#trust-anchor-distribution)
 - [Security Boundaries](#security-boundaries)
 - [Certificate Lifecycle](#certificate-lifecycle)
@@ -116,6 +117,65 @@ Three-tier PKI (Root → Policy CA → Issuing CA) is typically used in:
 - ❌ **No security benefit** - Offline Root already protects against compromise
 
 **Conclusion**: Two-tier provides optimal security-to-complexity ratio for internal PKI.
+
+---
+
+## Why Two Offline Sessions?
+
+A first-time question we get often: *why do I have to go offline twice, with a step on the production server in between? Can't I do it all in one go?*
+
+The short answer: **the sequence is forced by the architecture.**
+
+### The Three Forced Steps
+
+```
+Offline Session 1                  Online Step                  Offline Session 2
+─────────────────                  ───────────                  ─────────────────
+Create Root CA      ──────────►    Create Intermediate          Sign Intermediate
+key + self-signed                  key + CSR on production      CSR with Root key
+cert (10 years)     root_ca.crt    server (will live there      (5 years)
+                    travels via    permanently, never           intermediate_ca.crt
+                    USB            air-gapped again)            travels via USB
+```
+
+### Why Each Step Lives Where It Does
+
+| Step | Location | Why? |
+|------|----------|------|
+| Root CA key + cert | Air-gapped machine | The Root key must **never** touch the production server. If it did, the whole "offline Root CA" security model collapses. |
+| Intermediate key + CSR | Production server | The Intermediate key will sign service certs **for years**, fully automated. It has to live where the automation runs. Generating it elsewhere and transferring it would expose the private key during transport. |
+| Intermediate signing | Air-gapped machine | Signing requires the Root key. The Root key only exists offline. So the CSR has to come to the Root, not the other way around. |
+
+You can't merge steps without breaking one of these rules:
+- **Merge 1 + 2** → Root key visits production server (forbidden).
+- **Merge 2 + 3** → Intermediate key originates on air-gapped machine and travels via USB to production (private key transport risk).
+- **Skip the online step** → You'd have to pre-generate Intermediate keys on the air-gapped machine for every CA refresh — same transport problem.
+
+### The Analogy
+
+Think of it like notarizing a document with a presidential seal locked in a vault:
+
+- **Root CA** = the presidential seal (vault, used rarely, only for appointing notaries)
+- **Intermediate CA** = the notary (works daily in their office)
+- **Service cert** = the notarized document
+
+You make two trips to the vault — once to forge the seal (create Root), once to use it to commission a notary (sign Intermediate). After that, the notary handles thousands of documents without ever bothering the vault.
+
+### How Often in the Future?
+
+| Trigger | Offline session needed? | Frequency |
+|---------|------------------------|-----------|
+| Service certs (90-day) | ❌ No — Intermediate signs them automatically | Continuously |
+| Intermediate renewal | ✅ Yes — 1 offline session to re-sign | Every 5 years |
+| Intermediate compromised | ✅ Yes — emergency re-sign | Rare |
+| Root renewal | ✅ Yes — full setup from scratch | Every 10 years |
+
+After initial setup: **no offline sessions for 5 years** in normal operation.
+
+### See Also
+
+- [SETUP.md → Workflow Overview](SETUP.md#workflow-overview) — visual diagram of the three steps
+- [Security Boundaries](#security-boundaries) — what "offline" actually means in practice
 
 ---
 

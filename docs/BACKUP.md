@@ -4,7 +4,7 @@ Comprehensive backup strategy for step-ca PKI infrastructure following the **3-2
 
 ## ⚡ TL;DR
 
-3-2-1 Backup-Regel: Root CA GPG-verschlüsselt offline, Intermediate täglich + offsite, step-ca DB alle 6h. Recovery-Prozeduren für 3 Disaster-Szenarien dokumentiert.
+3-2-1 backup rule: Root CA GPG-encrypted offline, Intermediate daily + offsite, step-ca DB every 6 hours. Recovery procedures for three disaster scenarios documented below.
 
 ---
 

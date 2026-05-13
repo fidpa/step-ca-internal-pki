@@ -4,12 +4,13 @@ Complete installation guide for step-ca Production Setup.
 
 ## ⚡ TL;DR
 
-Offline Root CA (10 Jahre) erstellen → Intermediate CA generieren → step-ca Docker deployen → Zertifikate anfordern → Auto-Renewal aktivieren. Gesamtdauer: ~60 Minuten.
+Offline Root CA (10 years) → online Intermediate CSR → offline sign Intermediate → deploy step-ca → request certificates → auto-renewal. Total time: ~75 minutes. **You will go offline twice**, with one online step in between.
 
 ---
 
 ## Table of Contents
 
+- [Workflow Overview](#workflow-overview)
 - [Prerequisites](#prerequisites)
 - [Phase 1: Create Root CA (Offline)](#phase-1-create-root-ca-offline)
 - [Phase 2: Create Intermediate CA](#phase-2-create-intermediate-ca)
@@ -19,6 +20,69 @@ Offline Root CA (10 Jahre) erstellen → Intermediate CA generieren → step-ca 
 - [Phase 6: Install Client Trust](#phase-6-install-client-trust)
 - [Verification](#verification)
 - [Next Steps](#next-steps)
+
+---
+
+## Workflow Overview
+
+The two-tier PKI setup requires **two offline sessions** with one online step in between. This is enforced by the architecture: the Root CA private key must never touch the production server, but the Intermediate key must live there permanently.
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│  AIR-GAPPED MACHINE (e.g. MacBook with WiFi/Ethernet disabled)     │
+│                                                                    │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │ OFFLINE SESSION 1 — Phase 1                                  │  │
+│  │   • Generate Root CA key pair (ECDSA P-384)                  │  │
+│  │   • Self-sign Root CA certificate (10 years)                 │  │
+│  │   • GPG-encrypt Root key, securely wipe plaintext            │  │
+│  │   • USB ← root_ca.crt  (PUBLIC only)                         │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────┘
+                              │
+                              │  USB transports root_ca.crt
+                              ▼
+┌────────────────────────────────────────────────────────────────────┐
+│  PRODUCTION SERVER (online)                                        │
+│                                                                    │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │ ONLINE STEP — Phase 2 Steps 1–2                              │  │
+│  │   • Install root_ca.crt → /opt/step-ca/certs/                │  │
+│  │   • Generate Intermediate CA key pair (stays here)           │  │
+│  │   • Generate CSR (Certificate Signing Request)               │  │
+│  │   • USB ← intermediate_ca.csr  (signing request, public)     │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────┘
+                              │
+                              │  USB transports intermediate_ca.csr
+                              ▼
+┌────────────────────────────────────────────────────────────────────┐
+│  AIR-GAPPED MACHINE again                                          │
+│                                                                    │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │ OFFLINE SESSION 2 — Phase 2 Step 3                           │  │
+│  │   • GPG-decrypt Root key (passphrase from password manager)  │  │
+│  │   • Sign Intermediate CSR with Root → intermediate_ca.crt    │  │
+│  │   • Securely wipe decrypted Root key from disk               │  │
+│  │   • USB ← intermediate_ca.crt  (PUBLIC, 5-year validity)     │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────┘
+                              │
+                              │  USB transports intermediate_ca.crt
+                              ▼
+┌────────────────────────────────────────────────────────────────────┐
+│  PRODUCTION SERVER — Phases 3–6                                    │
+│   • Deploy step-ca Docker container                                │
+│   • Issue service certificates (90-day validity)                   │
+│   • systemd timer for auto-renewal                                 │
+│   • Install Root CA on clients                                     │
+│   • ONLINE only — no more offline sessions needed                  │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Why this sequence**: The Root key signs the Intermediate, so it must briefly come out of cold storage. But because the Intermediate key has to be born **on** the server (it will sign certificates there for years), the CSR-generation step happens online — forcing the two offline sessions to be split.
+
+**After setup**: No further offline sessions needed for 5 years (until Intermediate renewal). See [ARCHITECTURE.md](ARCHITECTURE.md#why-two-offline-sessions) for the design rationale.
 
 ---
 

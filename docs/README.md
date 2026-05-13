@@ -11,55 +11,54 @@ Comprehensive guides for step-ca Internal PKI setup, operation, and troubleshoot
 | [CLIENT_TRUST.md](CLIENT_TRUST.md) | Cross-platform Root CA installation | All users |
 | [NGINX_TLS.md](NGINX_TLS.md) | nginx TLS termination patterns | Developers |
 | [BACKUP.md](BACKUP.md) | 3-2-1 backup strategy for PKI | Admins |
+| [COEXISTENCE.md](COEXISTENCE.md) | Run step-ca alongside acme-dns, Pi-hole, AD DNS | Admins |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Common issues and solutions | All users |
 
 ## Reading Order
 
 ### New Users (Getting Started)
 
-1. **[SETUP.md](SETUP.md)** - Install step-ca and create your PKI (~60 min)
-2. **[CLIENT_TRUST.md](CLIENT_TRUST.md)** - Install Root CA on all clients
-3. **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - When things don't work
+1. **[SETUP.md](SETUP.md)** — Install step-ca and create your PKI (~75 min)
+2. **[CLIENT_TRUST.md](CLIENT_TRUST.md)** — Install Root CA on all clients
+3. **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** — When things don't work
 
 ### Understanding the System
 
-4. **[ARCHITECTURE.md](ARCHITECTURE.md)** - Why two-tier PKI? Design decisions
-5. **[NGINX_TLS.md](NGINX_TLS.md)** - Service integration patterns
+4. **[ARCHITECTURE.md](ARCHITECTURE.md)** — Why two-tier PKI? Why two offline sessions?
+5. **[NGINX_TLS.md](NGINX_TLS.md)** — Service integration patterns
 
 ### Operations & Maintenance
 
-6. **[BACKUP.md](BACKUP.md)** - Critical: Protect your Root CA!
+6. **[BACKUP.md](BACKUP.md)** — Critical: protect your Root CA
+7. **[COEXISTENCE.md](COEXISTENCE.md)** — Existing DNS/ACME infrastructure on the same host
 
 ## Document Overview
 
-### SETUP.md (460 lines)
+### SETUP.md
 
-Complete installation guide with 6 phases:
-- Phase 1: Create Root CA (offline, air-gapped)
-- Phase 2: Create Intermediate CA
-- Phase 3: Deploy step-ca Docker container
-- Phase 4: Request first service certificate
-- Phase 5: Set up auto-renewal
-- Phase 6: Install client trust
+Complete installation guide with six phases. Includes a workflow diagram of the
+**two offline sessions** required for setup (Root CA creation + Intermediate
+signing) and the online intermediate step in between.
 
-### ARCHITECTURE.md (360 lines)
+### ARCHITECTURE.md
 
 PKI design documentation covering:
 - Two-tier CA hierarchy rationale
+- Why two offline sessions are required (and why only two)
 - Security boundaries
 - Certificate lifecycle management
 - Compliance mapping (PCI DSS, SOC 2, ISO 27001)
 
-### CLIENT_TRUST.md (578 lines)
+### CLIENT_TRUST.md
 
 Cross-platform Root CA installation:
 - Linux (Ubuntu/Debian, Fedora/RHEL)
 - macOS (Keychain integration)
-- Windows (certutil)
+- Windows (certutil, GPO)
 - Browsers (Firefox, Chrome)
 - Docker containers
 
-### NGINX_TLS.md (586 lines)
+### NGINX_TLS.md
 
 nginx TLS configuration patterns:
 - TLS termination setup
@@ -67,7 +66,7 @@ nginx TLS configuration patterns:
 - Certificate chain configuration
 - Reverse proxy patterns
 
-### BACKUP.md (574 lines)
+### BACKUP.md
 
 PKI backup and disaster recovery:
 - 3-2-1 backup strategy
@@ -75,26 +74,22 @@ PKI backup and disaster recovery:
 - Recovery procedures
 - Backup verification
 
-### TROUBLESHOOTING.md (426 lines)
+### COEXISTENCE.md
+
+Running step-ca alongside existing services on port 53 or 80:
+- step-ca with acme-dns (port 53 conflict)
+- step-ca with Pi-hole / dnsmasq
+- step-ca with Active Directory DNS
+- Split-horizon DNS patterns
+
+### TROUBLESHOOTING.md
 
 Common issues and solutions:
 - Certificate validation errors
-- step-ca connection issues
+- step-ca container restart loops (missing `password` file)
 - Browser trust problems
+- DNS / TLS resolution issues
 - Renewal failures
-
-## Document Status
-
-| Document | Lines | Status | Last Updated |
-|----------|-------|--------|--------------|
-| SETUP.md | 460 | ✅ Complete | 2026-01-20 |
-| ARCHITECTURE.md | 360 | ✅ Complete | 2026-01-20 |
-| CLIENT_TRUST.md | 578 | ✅ Complete | 2026-01-20 |
-| NGINX_TLS.md | 586 | ✅ Complete | 2026-01-20 |
-| BACKUP.md | 574 | ✅ Complete | 2026-01-20 |
-| TROUBLESHOOTING.md | 426 | ✅ Complete | 2026-01-20 |
-
-**Total**: ~2984 lines of documentation
 
 ## See Also
 

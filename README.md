@@ -1,6 +1,6 @@
 # step-ca Internal PKI
 
-![Version](https://img.shields.io/badge/version-1.2.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.1-blue)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Linux-lightgrey?logo=linux)
 ![Bash](https://img.shields.io/badge/Bash-4.0%2B-blue?logo=gnu-bash)
@@ -411,4 +411,4 @@ Built with [Smallstep step-ca](https://github.com/smallstep/certificates) - A li
 
 ---
 
-**Production-tested since December 2025** | v1.2.0 (May 2026) | 8 scripts | 7 core docs + 12 READMEs
+**Production-tested since December 2025** | v1.2.1 (May 2026) | 8 scripts | 7 core docs + 12 READMEs

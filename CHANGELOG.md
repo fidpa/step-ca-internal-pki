@@ -14,6 +14,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Grafana dashboard templates for certificate expiry visualization
 - mTLS examples for service-to-service authentication
 
+## [1.2.1] - 2026-05-13
+
+### Added — Documentation Clarity
+
+Patch release. Documentation only — no behavioral changes, no script changes.
+
+- **`docs/ARCHITECTURE.md`**: New section **"Why Two Offline Sessions?"** answering the most common first-time question. Explains the forced sequence (Root offline → Intermediate CSR online → Intermediate signing offline), why each step has to live where it does, includes a notary/vault analogy and a renewal-frequency table showing that no further offline sessions are needed for 5 years after initial setup.
+- **`docs/SETUP.md`**: New **"Workflow Overview"** section near the top, with an ASCII diagram of the three setup steps making the air-gapped boundaries visible at a glance. TL;DR now states explicitly that two offline sessions are required.
+
+### Changed
+
+- **`docs/README.md`**: `COEXISTENCE.md` added to Quick Navigation and Reading Order (was missing since v1.2.0). Stale Document Status table removed.
+- **`docs/ARCHITECTURE.md` / `docs/BACKUP.md` / `docs/CLIENT_TRUST.md`**: TL;DRs translated from German to English for language consistency across the public repo.
+
 ## [1.2.0] - 2026-05-13
 
 ### Added — Real-World Migration Lessons
@@ -147,7 +161,9 @@ Lessons collected while deploying step-ca alongside an existing Let's Encrypt + 
 - Missing Prometheus monitoring integration
 - Limited service integration examples (only Vaultwarden)
 
-[Unreleased]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/fidpa/step-ca-internal-pki/releases/tag/v1.0.0

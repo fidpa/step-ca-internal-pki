@@ -4,7 +4,7 @@ Cross-platform Root CA installation for trusting internal step-ca certificates.
 
 ## ⚡ TL;DR
 
-Root CA-Zertifikat auf allen Clients installieren für Trust Chain Validation. Linux: update-ca-certificates, macOS: Keychain, Windows: certutil, Browser: Extra-Config nötig.
+Install the Root CA certificate on every client so the trust chain validates. Linux: `update-ca-certificates`. macOS: Keychain. Windows: `certutil`. Browsers: extra configuration may be needed (Firefox has its own store).
 
 ---
 
