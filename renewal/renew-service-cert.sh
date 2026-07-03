@@ -35,6 +35,8 @@ USAGE:
 
 OPTIONS:
     -h, --help     Show this help message and exit
+    --force        Renew immediately, bypassing the days-left threshold
+                   (useful after editing the .san file: re-issue with new SANs)
 
 DESCRIPTION:
     Auto-renew service certificates signed by step-ca Intermediate CA.
@@ -85,7 +87,18 @@ check_dependencies() {
 }
 
 # Parse arguments
-[[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && usage
+FORCE_RENEWAL=0
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help) usage ;;
+        --force) FORCE_RENEWAL=1 ;;
+        *)
+            echo "[ERROR] Unknown argument: $arg" >&2
+            echo "Usage: $0 [--force] [-h|--help]" >&2
+            exit 1
+            ;;
+    esac
+done
 
 # Check dependencies before proceeding
 check_dependencies
@@ -160,8 +173,9 @@ DAYS_LEFT=$(( (EXPIRY_EPOCH - NOW_EPOCH) / 86400 ))
 
 log_info "Certificate expires in $DAYS_LEFT days (threshold: $RENEWAL_THRESHOLD)"
 
-# Renew if less than threshold days remaining
-if [[ $DAYS_LEFT -lt $RENEWAL_THRESHOLD ]]; then
+# Renew if less than threshold days remaining (or --force)
+if [[ $DAYS_LEFT -lt $RENEWAL_THRESHOLD ]] || [[ $FORCE_RENEWAL -eq 1 ]]; then
+    [[ $FORCE_RENEWAL -eq 1 ]] && log_info "Force renewal requested (--force) - bypassing threshold"
     log_info "Starting renewal..."
 
     # Create secure temporary directory
@@ -231,6 +245,16 @@ EOFEXT
     # Sign with Intermediate CA
     # Note: -CAserial uses explicit path (required for systemd ProtectSystem=strict)
     # flock ensures serial number is not duplicated during concurrent renewals
+    #
+    # Keep the lockfile world-writable: /var/lock is tmpfs (cleared on reboot) and
+    # the first process to recreate it owns it. In multi-user setups (e.g. remote
+    # signing over SSH as a non-root user) a root-owned 0644 lockfile would lock
+    # every other signer out.
+    touch "$SERIAL_LOCKFILE" 2>/dev/null || true
+    chmod 666 "$SERIAL_LOCKFILE" 2>/dev/null || true
+
+    # Signing stderr stays visible on purpose: suppressing it hides the actual
+    # CA error (bad extfile, unreadable key, serial trouble) behind a generic message
     (
         if ! flock -x -w 60 200; then
             log_error "Failed to acquire serial file lock (timeout after 60s)"
@@ -246,7 +270,7 @@ EOFEXT
             -days 90 \
             -sha256 \
             -extfile "$TMPDIR/renewal-ext.cnf" \
-            -extensions v3_ca 2>/dev/null; then
+            -extensions v3_ca; then
             log_error "Failed to sign certificate"
             exit 1
         fi
@@ -255,6 +279,14 @@ EOFEXT
     # Check if subshell failed
     if [[ ! -f "$TMPDIR/renewal.crt" ]]; then
         log_error "Certificate signing failed (check previous errors)"
+        exit 1
+    fi
+
+    # Belt and suspenders: the signed certificate must embed the public key of
+    # the key generated above (guards against deploying a stale or foreign cert)
+    if [[ "$(openssl x509 -in "$TMPDIR/renewal.crt" -noout -pubkey 2>/dev/null)" != \
+          "$(openssl pkey -in "$TMPDIR/key.pem" -pubout 2>/dev/null)" ]]; then
+        log_error "Public key mismatch: signed certificate does not match generated key"
         exit 1
     fi
 

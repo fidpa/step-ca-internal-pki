@@ -24,6 +24,10 @@ renewal/
 # Run renewal check (requires root for service reload)
 sudo SERVICE_NAME=myservice ./renew-service-cert.sh
 
+# Renew immediately, bypassing the threshold
+# (e.g. after adding SANs to the .san file)
+sudo SERVICE_NAME=myservice ./renew-service-cert.sh --force
+
 # Configure via systemd timer (recommended)
 # See ../systemd/ for templates
 ```
@@ -41,10 +45,20 @@ sudo SERVICE_NAME=myservice ./renew-service-cert.sh
 ## Workflow
 
 1. **Check Expiry**: Script checks certificate expiry date
-2. **Threshold**: If expiry < `RENEWAL_THRESHOLD` days, renewal triggers
-3. **Request**: New certificate requested from Intermediate CA
-4. **Deploy**: Certificate placed in `STEP_CA_CERT_DIR`
-5. **Reload**: `SERVICE_RELOAD_CMD` executes to apply new certificate
+2. **Threshold**: If expiry < `RENEWAL_THRESHOLD` days (or `--force`), renewal triggers
+3. **Request**: New key + CSR generated, SANs loaded from `<SERVICE_NAME>.san` (single source)
+4. **Sign**: flock-protected signing with the Intermediate CA
+5. **Verify**: Public-key match (cert ↔ new key) + full chain verification
+6. **Deploy**: Atomic staging + `mv` into `STEP_CA_CERT_DIR` (with `.bak` rollback)
+7. **Reload**: `SERVICE_RELOAD_CMD` executes to apply the new certificate (rollback on failure)
+
+**Changing SANs**: Edit `${STEP_CA_CERT_DIR}/${SERVICE_NAME}.san`, then run once
+with `--force` — the next timer run alone would not re-issue until the threshold.
+
+**Failure visibility**: Renewals run unattended — wire up
+`../systemd/step-ca-renew-failure-notify.service.template` via `OnFailure=`
+so a failed nightly run notifies you instead of surfacing as a browser
+warning weeks later.
 
 ## Integration with systemd
 

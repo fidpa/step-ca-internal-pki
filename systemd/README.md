@@ -6,8 +6,9 @@ systemd service and timer templates for automatic certificate renewal.
 
 ```
 systemd/
-├── step-ca-renew.service.template    # Service unit template
-└── step-ca-renew.timer.template      # Timer unit template
+├── step-ca-renew.service.template                # Service unit template
+├── step-ca-renew.timer.template                  # Timer unit template
+└── step-ca-renew-failure-notify.service.template # OnFailure notification hook
 ```
 
 ## Files
@@ -16,6 +17,7 @@ systemd/
 |------|------|-------------|
 | `step-ca-renew.service.template` | Service | Renewal service template |
 | `step-ca-renew.timer.template` | Timer | Daily execution timer |
+| `step-ca-renew-failure-notify.service.template` | Service | Notification on failed renewal (`OnFailure=`) |
 
 ## Quick Install
 
@@ -56,6 +58,10 @@ Environment="STEP_CA_CERT_DIR=/etc/ssl/step-ca"
 Environment="RENEWAL_THRESHOLD=30"
 ```
 
+> **Note**: The template deliberately sets no `Restart=`. systemd rejects
+> `Restart=on-failure` for `Type=oneshot` units before v254 (Debian 12 ships
+> v252) — the unit would fail to load. The daily timer is the retry mechanism.
+
 ### step-ca-renew.timer.template
 
 Default schedule: Daily at a random time
@@ -66,6 +72,30 @@ OnCalendar=daily
 RandomizedDelaySec=3600
 Persistent=true
 ```
+
+### step-ca-renew-failure-notify.service.template
+
+Renewals run unattended at night — without a notification hook, a silently
+failing renewal stays invisible until the certificate expires ~30 days later
+(or until your Prometheus alerts fire, if you deployed `../monitoring/`).
+
+```bash
+# 1. Set your notification command (webhook, mail, ntfy, ...) in ExecStart
+sudo cp step-ca-renew-failure-notify.service.template /etc/systemd/system/step-ca-renew-failure-notify.service
+
+# 2. Uncomment OnFailure= in your renew service(s)
+#    OnFailure=step-ca-renew-failure-notify.service
+
+sudo systemctl daemon-reload
+
+# 3. Test the notification path once
+sudo systemctl start step-ca-renew-failure-notify.service
+```
+
+**Tip — persistent file log**: On busy hosts, journald retention can be shorter
+than one night; a failed 03:30 run may leave no trace by morning. Uncomment the
+`StandardOutput=append:` lines in the renew service template to keep a
+persistent log at `/var/log/step-ca-renew.log`.
 
 ## Multiple Services
 

@@ -1,6 +1,6 @@
 # step-ca Internal PKI
 
-![Version](https://img.shields.io/badge/version-1.2.1-blue)
+![Version](https://img.shields.io/badge/version-1.3.0-blue)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Linux-lightgrey?logo=linux)
 ![Bash](https://img.shields.io/badge/Bash-4.0%2B-blue?logo=gnu-bash)
@@ -18,7 +18,8 @@ Production-ready PKI (Public Key Infrastructure) setup with [Smallstep's step-ca
 
 - **Two-Tier PKI** - Offline Root CA + Online Intermediate CA for enhanced security
 - **Battle-Tested Scripts** - Air-gap verification, decrypt-verify, cleanup-trap, cross-platform secure-delete (`scripts/`)
-- **Auto-Renewal** - systemd timers for automatic certificate renewal (30-day threshold)
+- **Auto-Renewal** - systemd timers for automatic certificate renewal (30-day threshold, `--force` re-issue)
+- **Failure Notifications** - `OnFailure=` hook template: a silently failing nightly renewal notifies you instead of surfacing as a browser warning weeks later
 - **Prometheus Monitoring** - Certificate expiry metrics and alerts
 - **Service Integration** - Examples for Vaultwarden, Nextcloud, Portainer, nginx
 - **⚠️ CRL Support** - Certificate Revocation Lists (EXPERIMENTAL - see [Limitations](#known-limitations))
@@ -241,10 +242,12 @@ step-ca-internal-pki/
 ├── monitoring/           # Prometheus metrics exporters
 │   ├── README.md         # Monitoring guide
 │   ├── cert-exporter.sh  # Certificate expiry metrics
-│   └── check-time-sync.sh # NTP time synchronization validation
+│   ├── check-time-sync.sh # NTP time synchronization validation
+│   ├── prometheus-rules.yml    # Alert rules (expiry, staleness, container)
+│   └── grafana-dashboard.json  # Certificate monitoring dashboard
 ├── renewal/              # Auto-renewal scripts
 │   ├── README.md         # Renewal workflow
-│   └── renew-service-cert.sh
+│   └── renew-service-cert.sh   # --force flag + pubkey match check (v1.3.0+)
 ├── revocation/           # Certificate revocation (⚠️ EXPERIMENTAL)
 │   ├── README.md         # Revocation guide
 │   └── revoke-cert.sh
@@ -252,6 +255,7 @@ step-ca-internal-pki/
 │   ├── README.md         # Timer setup + ReadWritePaths hardening
 │   ├── step-ca-renew.service.template
 │   ├── step-ca-renew.timer.template
+│   ├── step-ca-renew-failure-notify.service.template  # OnFailure hook (v1.3.0+)
 │   ├── check-time-sync.service
 │   └── check-time-sync.timer
 ├── CONTRIBUTING.md       # Contribution guidelines
@@ -411,4 +415,4 @@ Built with [Smallstep step-ca](https://github.com/smallstep/certificates) - A li
 
 ---
 
-**Production-tested since December 2025** | v1.2.1 (May 2026) | 8 scripts | 7 core docs + 12 READMEs
+**Production-tested since December 2025** | v1.3.0 (July 2026) | 8 scripts | 7 core docs + 12 READMEs

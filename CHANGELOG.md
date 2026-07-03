@@ -14,6 +14,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Grafana dashboard templates for certificate expiry visualization
 - mTLS examples for service-to-service authentication
 
+## [1.3.0] - 2026-07-03
+
+### Added — Renewal Hardening & Failure Visibility
+
+Lessons from a production review of the renewal pipeline (short journald
+retention had swallowed nightly renewal logs; a cert-consumer host ran without
+expiry metrics for months). All changes are environment-neutral.
+
+- **`renewal/renew-service-cert.sh`**:
+  - `--force` flag — renew immediately, bypassing the days-left threshold. Needed after editing the `.san` file: the next timer run alone would not re-issue until the threshold.
+  - Public-key match check before deployment — the signed certificate must embed the freshly generated key (guards against deploying a stale or foreign certificate)
+- **`systemd/step-ca-renew-failure-notify.service.template`** — `OnFailure=` notification hook with webhook/mail/ntfy examples. Renewals run unattended at night; without a hook, the first symptom of a failing renewal is a browser warning weeks later.
+- **`systemd/step-ca-renew.service.template`** — commented `StandardOutput=append:` file-log option for hosts whose journald retention is shorter than one night (a failed 03:30 run would leave no trace by morning)
+- **`monitoring/cert-exporter.sh`** — `EXPORT_CONTAINER_METRIC` toggle (default `true`). On cert-consumer hosts without the step-ca container, the hardcoded `step_ca_container_up 0` made the `StepCAContainerDown` alert fire permanently; set `false` there.
+
+### Fixed
+
+- **`systemd/step-ca-renew.service.template`**: removed `Restart=on-failure` — systemd rejects `Restart=` for `Type=oneshot` units before v254 (Debian 12 ships v252), so the unit failed to load there. The daily timer is the retry mechanism.
+
+### Changed
+
+- **`renewal/renew-service-cert.sh` / `examples/cert-request-template.sh`**:
+  - Signing errors are no longer suppressed (`2>/dev/null` removed from the `openssl x509 -req` signing call) — a failing CA call now shows its actual error (bad extfile, unreadable key, serial trouble) instead of a generic message
+  - Serial lockfile is created world-writable (`touch` + `chmod 666`): `/var/lock` is tmpfs, and after a reboot a root-owned `0644` lockfile would lock out non-root signers (e.g. remote signing over SSH)
+- **`CODE_OF_CONDUCT.md` / `docs/ARCHITECTURE.md`**: Markdown style normalization (`-` list markers, `_italic_`) — formatting only, no content changes
+
 ## [1.2.1] - 2026-05-13
 
 ### Added — Documentation Clarity

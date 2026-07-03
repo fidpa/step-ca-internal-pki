@@ -10,11 +10,15 @@
 # Requirements: openssl, docker (for container health check)
 #
 # Configuration via environment variables:
-#   STEP_CA_HOME          - step-ca installation directory (default: /opt/step-ca)
-#   STEP_CA_CERT_DIR      - Certificate storage directory (default: /etc/ssl/step-ca)
-#   OUTPUT_FILE           - Metrics output file (default: stdout)
-#   SERVICE_NAME          - Service certificate name (default: service)
-#   DOCKER_CONTAINER      - Docker container name (default: step-ca)
+#   STEP_CA_HOME            - step-ca installation directory (default: /opt/step-ca)
+#   STEP_CA_CERT_DIR        - Certificate storage directory (default: /etc/ssl/step-ca)
+#   OUTPUT_FILE             - Metrics output file (default: stdout)
+#   SERVICE_NAME            - Service certificate name (default: service)
+#   DOCKER_CONTAINER        - Docker container name (default: step-ca)
+#   EXPORT_CONTAINER_METRIC - Export step_ca_container_up (default: true).
+#                             Set to "false" on cert-consumer hosts that do not
+#                             run the step-ca container - otherwise the
+#                             StepCAContainerDown alert fires permanently there.
 #
 # Exported Metrics:
 #   step_ca_cert_expiry_seconds{type,service_name|cn} - Unix epoch of expiry
@@ -46,11 +50,14 @@ DESCRIPTION:
     Outputs metrics to stdout or file (for node_exporter textfile collector).
 
 ENVIRONMENT VARIABLES:
-    STEP_CA_HOME          step-ca installation directory (default: /opt/step-ca)
-    STEP_CA_CERT_DIR      Certificate storage directory (default: /etc/ssl/step-ca)
-    OUTPUT_FILE           Metrics output file (default: stdout)
-    SERVICE_NAME          Service certificate name (default: service)
-    DOCKER_CONTAINER      Docker container name (default: step-ca)
+    STEP_CA_HOME            step-ca installation directory (default: /opt/step-ca)
+    STEP_CA_CERT_DIR        Certificate storage directory (default: /etc/ssl/step-ca)
+    OUTPUT_FILE             Metrics output file (default: stdout)
+    SERVICE_NAME            Service certificate name (default: service)
+    DOCKER_CONTAINER        Docker container name (default: step-ca)
+    EXPORT_CONTAINER_METRIC Export step_ca_container_up (default: true).
+                            Set "false" on hosts without the step-ca container,
+                            otherwise StepCAContainerDown fires permanently.
 
 EXPORTED METRICS:
     step_ca_cert_expiry_seconds{type,cn}    Unix epoch of certificate expiry
@@ -113,6 +120,7 @@ readonly STEP_CA_HOME="${STEP_CA_HOME:-/opt/step-ca}"
 readonly STEP_CA_CERT_DIR="${STEP_CA_CERT_DIR:-/etc/ssl/step-ca}"
 readonly SERVICE_NAME="${SERVICE_NAME:-service}"
 readonly DOCKER_CONTAINER="${DOCKER_CONTAINER:-step-ca}"
+readonly EXPORT_CONTAINER_METRIC="${EXPORT_CONTAINER_METRIC:-true}"
 OUTPUT_FILE="${OUTPUT_FILE:-}"  # Empty = stdout
 
 # Certificate paths
@@ -214,7 +222,12 @@ ROOT_EXPIRY=$(get_cert_expiry "$ROOT_CA")
 ROOT_CN=$(get_cert_cn "$ROOT_CA")
 ROOT_DAYS=$(days_remaining "$ROOT_EXPIRY")
 
-CONTAINER_UP=$(check_container_health "$DOCKER_CONTAINER")
+# Container health only where the step-ca container actually runs
+# (cert-consumer hosts export certificate metrics without step_ca_container_up)
+CONTAINER_UP="n/a"
+if [[ "$EXPORT_CONTAINER_METRIC" == "true" ]]; then
+    CONTAINER_UP=$(check_container_health "$DOCKER_CONTAINER")
+fi
 
 # Generate Prometheus metrics
 {
@@ -231,10 +244,12 @@ CONTAINER_UP=$(check_container_health "$DOCKER_CONTAINER")
     echo "step_ca_cert_days_remaining{type=\"intermediate\",cn=\"${INTERMEDIATE_CN}\"} ${INTERMEDIATE_DAYS}"
     echo "step_ca_cert_days_remaining{type=\"root\",cn=\"${ROOT_CN}\"} ${ROOT_DAYS}"
 
-    echo ""
-    echo "# HELP step_ca_container_up step-ca Docker container health (1=up, 0=down)"
-    echo "# TYPE step_ca_container_up gauge"
-    echo "step_ca_container_up ${CONTAINER_UP}"
+    if [[ "$EXPORT_CONTAINER_METRIC" == "true" ]]; then
+        echo ""
+        echo "# HELP step_ca_container_up step-ca Docker container health (1=up, 0=down)"
+        echo "# TYPE step_ca_container_up gauge"
+        echo "step_ca_container_up ${CONTAINER_UP}"
+    fi
 
     echo ""
     echo "# HELP step_ca_scrape_timestamp_seconds Unix epoch of metric collection"

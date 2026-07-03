@@ -2,6 +2,10 @@
 Description=Renew step-ca Service Certificate
 After=network-online.target
 Wants=network-online.target
+# Optional: get notified when a renewal fails (renewals run unattended at night;
+# without a hook, the first symptom is often a browser warning weeks later).
+# See step-ca-renew-failure-notify.service.template
+#OnFailure=step-ca-renew-failure-notify.service
 
 [Service]
 Type=oneshot
@@ -17,6 +21,12 @@ Environment="SERVICE_RELOAD_CMD=systemctl reload nginx"
 
 ExecStart=/usr/local/bin/renew-service-cert.sh
 
+# Optional: persistent file log instead of the journal. Useful on hosts with
+# short journald retention (busy systems can rotate a night run away within
+# hours - a failed 03:30 renewal would leave no trace by morning):
+#StandardOutput=append:/var/log/step-ca-renew.log
+#StandardError=append:/var/log/step-ca-renew.log
+
 # Security
 User=root
 PrivateTmp=true
@@ -24,6 +34,6 @@ ProtectSystem=strict
 # /opt/step-ca/certs needed for intermediate_ca.srl (serial file)
 ReadWritePaths=/etc/ssl/step-ca /var/log /opt/step-ca/certs
 
-# Restart behavior
-Restart=on-failure
-RestartSec=300
+# NOTE: No Restart= here. systemd rejects Restart=on-failure for Type=oneshot
+# units before v254 (e.g. Debian 12 ships v252) - the unit would fail to load.
+# The daily timer provides the retry cadence instead.

@@ -50,6 +50,9 @@ groups:
           description: "Root CA {{ $labels.cn }} expires in {{ $value }} days - Plan rotation"
 
       # Container Health
+      # Note: only meaningful on the host running the step-ca container.
+      # On cert-consumer hosts run cert-exporter.sh with
+      # EXPORT_CONTAINER_METRIC=false, otherwise this alert fires permanently.
       - alert: StepCAContainerDown
         expr: step_ca_container_up == 0
         for: 5m

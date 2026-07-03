@@ -208,6 +208,16 @@ EOF
 # Sign certificate with Intermediate CA
 # Note: -CAserial uses explicit path (avoids CWD write issues)
 # flock ensures serial number is not duplicated during concurrent requests
+#
+# Keep the lockfile world-writable: /var/lock is tmpfs (cleared on reboot) and
+# the first process to recreate it owns it. In multi-user setups (e.g. remote
+# signing over SSH as a non-root user) a root-owned 0644 lockfile would lock
+# every other signer out.
+touch "$SERIAL_LOCKFILE" 2>/dev/null || true
+chmod 666 "$SERIAL_LOCKFILE" 2>/dev/null || true
+
+# Signing stderr stays visible on purpose: suppressing it hides the actual
+# CA error (bad extfile, unreadable key, serial trouble) behind a generic message
 log "Signing certificate with Intermediate CA..."
 (
     if ! flock -x -w 60 200; then
@@ -224,7 +234,7 @@ log "Signing certificate with Intermediate CA..."
         -days "$CERT_VALIDITY_DAYS" \
         -sha256 \
         -extfile "$TMPDIR/ext.cnf" \
-        -extensions v3_ca 2>/dev/null; then
+        -extensions v3_ca; then
         error "Failed to sign certificate"
         exit 1
     fi

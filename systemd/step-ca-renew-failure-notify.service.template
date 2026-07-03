@@ -1,0 +1,39 @@
+# step-ca Renewal Failure Notification (template)
+#
+# Triggered via OnFailure= in step-ca-renew.service - fires only when a renewal
+# run fails. No timer, no enable needed: systemd activates it on demand.
+#
+# Why: renewals run unattended (typically at night). Without an active
+# notification, a silently failing renewal stays invisible until the
+# certificate expires ~30 days later.
+#
+# Install:
+#   1. Replace ExecStart with your notification command (webhook, mail, ntfy, ...)
+#   2. sudo cp step-ca-renew-failure-notify.service.template \
+#        /etc/systemd/system/step-ca-renew-failure-notify.service
+#   3. Uncomment OnFailure= in your renew service, then: systemctl daemon-reload
+#   4. Test once: systemctl start step-ca-renew-failure-notify.service
+
+[Unit]
+Description=step-ca Renewal Failure Notification
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+
+# CONFIGURE: your notification command. Examples:
+#   Webhook:  curl -sf -X POST -H 'Content-Type: application/json' \
+#               -d '{"text":"step-ca renewal FAILED on '"$(hostname)"'"}' \
+#               https://chat.example.com/hooks/XXXX
+#   Mail:     sh -c 'systemctl status step-ca-renew.service | mail -s "step-ca renewal FAILED" admin@example.com'
+#   ntfy.sh:  curl -sf -d "step-ca renewal FAILED on $(hostname)" https://ntfy.sh/your-topic
+ExecStart=/bin/sh -c 'echo "CONFIGURE ME: step-ca renewal failed on $(hostname)" >&2; exit 1'
+
+# Security
+User=nobody
+PrivateTmp=true
+ProtectSystem=strict
+NoNewPrivileges=true
+MemoryMax=64M
+TimeoutStartSec=60

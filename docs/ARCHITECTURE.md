@@ -122,7 +122,7 @@ Three-tier PKI (Root → Policy CA → Issuing CA) is typically used in:
 
 ## Why Two Offline Sessions?
 
-A first-time question we get often: *why do I have to go offline twice, with a step on the production server in between? Can't I do it all in one go?*
+A first-time question we get often: _why do I have to go offline twice, with a step on the production server in between? Can't I do it all in one go?_
 
 The short answer: **the sequence is forced by the architecture.**
 

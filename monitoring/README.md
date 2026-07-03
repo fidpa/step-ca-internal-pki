@@ -55,6 +55,9 @@ After=network.target
 Type=oneshot
 Environment="OUTPUT_FILE=/var/lib/node_exporter/textfile_collector/step_ca.prom"
 Environment="SERVICE_NAME=service"
+# On cert-consumer hosts WITHOUT the step-ca container, disable the container
+# metric - otherwise the StepCAContainerDown alert fires permanently there:
+# Environment="EXPORT_CONTAINER_METRIC=false"
 ExecStart=/usr/local/bin/cert-exporter.sh
 User=root
 EOF
