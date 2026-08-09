@@ -14,6 +14,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Grafana dashboard templates for certificate expiry visualization
 - mTLS examples for service-to-service authentication
 
+## [1.3.1] - 2026-08-09
+
+Housekeeping release. **No behavioral changes** — the scripts, the systemd unit
+templates, the CA configuration and the monitoring rules are byte-identical to
+v1.3.0. Everything here is CI coverage, repository metadata and documentation
+links. A CA already in operation needs no action.
+
+### Fixed — Repository Hygiene & CI Coverage
+
+- **`.github/workflows/lint.yml`**: the `shellcheck` and `syntax-check` jobs now cover `scripts/` as well. Both previously listed `monitoring/ renewal/ revocation/ examples/` only, which left the three most security-critical scripts of the project unchecked: `create-root-ca.sh`, `generate-intermediate-csr.sh` and `sign-intermediate-ca.sh` — Root CA creation and offline intermediate signing. 5 of 8 tracked scripts were linted; it is 8 of 8 now. All three pass at `--severity=error`.
+- **`CHANGELOG.md`**: three dead links removed or redirected. Versions 1.1.0 and 0.9.0 are documented here but were never tagged and never released, so `compare/v1.0.1...v1.1.0`, `compare/v1.1.0...v1.2.0` and `releases/tag/v0.9.0` each answered with 404. `[1.2.0]` now compares against the nearest *existing* tag (`v1.0.1`), and the link definitions for 1.1.0 and 0.9.0 were dropped rather than invented — their headings render as plain text, which is an accurate reflection of their status. A comment at the end of the file records the reason. The missing tags are deliberately **not** created retroactively: a tag push triggers the release workflow and would publish a release for a version that never shipped.
+- **`CHANGELOG.md`**: the `[1.3.0]` link definition was missing and `[Unreleased]` still pointed at `v1.2.1`; both corrected. The 1.3.0 heading had been rendering as plain text since July.
+- **`README.md`**: the example URL in "Why I Built This" now uses `192.168.1.50` — the address already used in the problem statement at the top of the file — instead of a second, unrelated address.
+
+### Changed
+
+- **`.github/workflows/release.yml`**: release notes are now cut from the `CHANGELOG.md` section of the tagged version instead of being generated from commit messages. This repository's commits are bare `vX.Y.Z` lines, so `generate_release_notes: true` produced an essentially empty release page while the actual content sat in the changelog — the bodies of v1.0.1 through v1.3.0 were each pasted in by hand afterwards. For a PKI project this is more than cosmetic: users decide from the release page whether an update is security-relevant. The workflow now fails loudly if no changelog section exists for the tag, and `softprops/action-gh-release` moved from `@v1` (deprecated Node runtime) to `@v2`.
+- **`.shellcheckrc`**: the header comment described another project's device inventory and referenced a `script-audit.sh` that does not exist in this repository; replaced with a description of this repository. The trailing `severity=warning` line was replaced by a comment explaining why it never had any effect: ShellCheck has no `severity` key for `.shellcheckrc` and discards unknown keys silently. Verified with ShellCheck 0.9.0 — `severity=warning`, `severity=style` and a made-up key produced identical output, while adding a code to `disable=` did change it. The binding threshold is the `--severity=` flag in `lint.yml`.
+- **`.gitignore`**: `.claude/` added, so local agent tooling can never be committed.
+
 ## [1.3.0] - 2026-07-03
 
 ### Added — Renewal Hardening & Failure Visibility
@@ -187,10 +207,19 @@ Lessons collected while deploying step-ca alongside an existing Let's Encrypt + 
 - Missing Prometheus monitoring integration
 - Limited service integration examples (only Vaultwarden)
 
-[Unreleased]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.2.1...HEAD
+<!--
+Link definitions. Versions 1.1.0 and 0.9.0 deliberately have none: they were
+documented here but never tagged and never released, so every compare/tag URL
+for them is a 404. Their headings therefore render as plain text, which is an
+accurate reflection of their status. Do not add links back, and do not create
+the missing tags retroactively - a tag push triggers .github/workflows/release.yml
+and would publish a release for a version that never shipped.
+-->
+
+[Unreleased]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.2.0...v1.2.1
-[1.2.0]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.0.1...v1.1.0
+[1.2.0]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.0.1...v1.2.0
 [1.0.1]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/fidpa/step-ca-internal-pki/releases/tag/v1.0.0
-[0.9.0]: https://github.com/fidpa/step-ca-internal-pki/releases/tag/v0.9.0

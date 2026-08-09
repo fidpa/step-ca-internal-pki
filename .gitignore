@@ -84,3 +84,6 @@ LINKEDIN_POST.md
 # rclone links and CLAUDE.md symlinks
 *.rclonelink
 CLAUDE.md
+
+# Local agent tooling (slash commands, session state) - never published
+.claude/

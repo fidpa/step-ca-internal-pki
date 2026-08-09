@@ -30,6 +30,10 @@ jobs:
         run: |
           find examples -name "*.sh" -print0 | xargs -0 shellcheck --severity=error
 
+      - name: Run ShellCheck on scripts/
+        run: |
+          find scripts -name "*.sh" -print0 | xargs -0 shellcheck --severity=error
+
   syntax-check:
     name: Bash Syntax
     runs-on: ubuntu-latest
@@ -39,4 +43,4 @@ jobs:
 
       - name: Validate Bash syntax
         run: |
-          find monitoring renewal revocation examples -name "*.sh" -print0 | xargs -0 -I {} bash -n {}
+          find monitoring renewal revocation examples scripts -name "*.sh" -print0 | xargs -0 -I {} bash -n {}

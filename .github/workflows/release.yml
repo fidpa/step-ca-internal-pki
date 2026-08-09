@@ -15,10 +15,25 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract changelog section
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          sed -n "/^## \[${VERSION}\]/,/^## \[/p" CHANGELOG.md \
+            | sed '1d' | sed '/^## \[/d' > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "::error::No CHANGELOG section for ${VERSION}"
+            exit 1
+          fi
+          wc -m release-notes.md
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,6 +1,6 @@
 # step-ca Internal PKI
 
-![Version](https://img.shields.io/badge/version-1.3.0-blue)
+![Version](https://img.shields.io/badge/version-1.3.1-blue)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Linux-lightgrey?logo=linux)
 ![Bash](https://img.shields.io/badge/Bash-4.0%2B-blue?logo=gnu-bash)
@@ -395,7 +395,7 @@ MIT License - see [LICENSE](LICENSE)
 
 Marc Allgeier ([@fidpa](https://github.com/fidpa))
 
-**Why I Built This**: After clicking through browser warnings for months (`https://192.168.100.2:8443` is not a great experience), I finally set up a proper internal PKI. The official step-ca documentation covers basics well, but lacks production patterns: multi-service integration, monitoring, auto-renewal automation, and client trust distribution. This repo consolidates everything I learned into a reusable setup.
+**Why I Built This**: After clicking through browser warnings for months (`https://192.168.1.50:8443` is not a great experience), I finally set up a proper internal PKI. The official step-ca documentation covers basics well, but lacks production patterns: multi-service integration, monitoring, auto-renewal automation, and client trust distribution. This repo consolidates everything I learned into a reusable setup.
 
 ## See Also
 
@@ -415,4 +415,4 @@ Built with [Smallstep step-ca](https://github.com/smallstep/certificates) - A li
 
 ---
 
-**Production-tested since December 2025** | v1.3.0 (July 2026) | 8 scripts | 7 core docs + 12 READMEs
+**Production-tested since December 2025** | v1.3.1 (August 2026) | 8 scripts | 7 core docs + 12 READMEs

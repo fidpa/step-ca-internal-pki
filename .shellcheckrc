@@ -1,7 +1,6 @@
-# .shellcheckrc - Pi-Router + NAS Server shellcheck config
-# Multi-Device Setup: 552 Shell-Scripts (Pi 5: ~249, NAS: ~303)
-# Best Practices 2025 compliant
-# Optimized for ShellCheck 0.9.0+ (Last reviewed: 12. Dezember 2025)
+# .shellcheckrc - ShellCheck configuration for step-ca-internal-pki
+# Applies to all shell scripts in this repository (see .github/workflows/lint.yml)
+# Optimized for ShellCheck 0.9.0+
 #
 # References:
 # - https://www.shellcheck.net/wiki/Directive
@@ -48,6 +47,12 @@ source-path=SCRIPTDIR
 # Safely enables shellcheck to open sourced files where possible
 external-sources=true
 
-# Minimum severity threshold (focus on errors + warnings)
-# Consistent with script-audit.sh Production-Ready threshold (85%+ clean)
-severity=warning
+# NOTE: the severity threshold is NOT configurable here.
+# ShellCheck has no `severity` key for .shellcheckrc and silently discards
+# unknown keys - a `severity=warning` line in this file looks like a setting
+# but has no effect whatsoever. Verified with ShellCheck 0.9.0 on 2026-08-09:
+# `severity=warning`, `severity=style` and a made-up key all produced the
+# identical result, while adding SC2155 to `disable=` above did change it.
+# The binding threshold is the `--severity=` flag in .github/workflows/lint.yml.
+# Do not "fix" this by dropping that flag - the job would fall back to the
+# ShellCheck default (style/info) instead.
