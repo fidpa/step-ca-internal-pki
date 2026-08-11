@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Grafana dashboard templates for certificate expiry visualization
 - mTLS examples for service-to-service authentication
 
+## [1.3.2] - 2026-08-11
+
+### Fixed
+
+- **Missing executable bit on 7 of 8 tracked scripts.** `monitoring/cert-exporter.sh`, `monitoring/check-time-sync.sh`, `renewal/renew-service-cert.sh`, `revocation/revoke-cert.sh`, `scripts/create-root-ca.sh`, `scripts/generate-intermediate-csr.sh` and `scripts/sign-intermediate-ca.sh` were mode `644` in the repository, while `README.md` and `scripts/README.md` document direct invocation (`./scripts/create-root-ca.sh`, `./scripts/generate-intermediate-csr.sh`, `./scripts/sign-intermediate-ca.sh`). Following the documented usage literally failed with `Permission denied`; only `bash scripts/create-root-ca.sh` worked around it. All seven are now mode `755`. `examples/cert-request-template.sh` is unaffected — it is a template meant to be copied and edited, not executed directly, and stays at `644`. No script content changed.
+
 ## [1.3.1] - 2026-08-09
 
 Housekeeping release. **No behavioral changes** — the scripts, the systemd unit
@@ -216,7 +222,8 @@ the missing tags retroactively - a tag push triggers .github/workflows/release.y
 and would publish a release for a version that never shipped.
 -->
 
-[Unreleased]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.2...HEAD
+[1.3.2]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.2.0...v1.2.1
