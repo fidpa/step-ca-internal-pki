@@ -14,6 +14,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Grafana dashboard templates for certificate expiry visualization
 - mTLS examples for service-to-service authentication
 
+## [1.3.7] - 2026-08-27: Editorial sections state what holds, not how much did not
+
+A release page says what now holds. How long something was wrong, how many statements a
+check did not survive and which internal steps led there address the maintainer, not the
+reader, and they push the corrections themselves into the background. The rule this
+repository follows now is that the tally stays out of the release page while every
+correction keeps its own entry, with its effect and its anchor in the code.
+
+Nothing in the scripts, the systemd templates, the CA configuration or the monitoring
+rules changed; a CA in operation needs no action.
+
+### Changed
+- **The editorial sections open with what was put right, not with a count of what was
+  wrong.** The introductions to `[1.3.3]`, `[1.3.4]` and `[1.3.5]` no longer carry the
+  number of corrected statements, the span of time they had stood, or the count of manual
+  steps that preceded the fix. Each individual correction stays exactly where it was, as
+  its own entry with its effect and its file, function or tag reference.
+- **The `[1.3.3]` headline names the pass, not its yield.** It carried a count of corrected
+  statements, which made the tally the first thing a visitor read in the release list and
+  on the release page. The published title of `v1.3.3` was set to match.
+
+### Upgrade notes
+
+Nothing to do. This release changes changelog text only.
+
 ## [1.3.6] - 2026-08-27: Published body matches the changelog section byte for byte
 
 The title extraction added in 1.3.5 worked on the first tag that used it, and the check
@@ -35,9 +60,9 @@ changelog.
 Every release since 1.0.0 was published by `.github/workflows/release.yml`, which handed
 `softprops/action-gh-release` a body but no name. The action then falls back to the tag,
 so each release page opened with the bare version that the release list already shows
-next to it, and the title had to be corrected by hand afterwards. Three releases in a row
-were corrected that way. The workflow now derives the title from the changelog itself,
-which removes the manual step rather than repeating it.
+next to it, and the title had to be corrected by hand afterwards. The workflow now derives
+the title from the changelog itself, which removes the manual step rather than repeating
+it.
 
 ### Changed
 
@@ -66,10 +91,11 @@ which removes the manual step rather than repeating it.
 
 ## [1.3.4] - 2026-08-27: Documentation entries lead with the effect, not the file name
 
-Follow-up to the editorial pass in 1.3.3. Seven entries had been left with a file
-name as their opening sentence, all of them documentation or repository
-metadata. The style guide exempts such entries from naming a place in the code,
-because there is none, but not from stating what changed for the reader.
+Follow-up to the editorial pass in 1.3.3, which covered the entries that anchor
+on code. Documentation and repository-metadata entries opened with a file name
+instead of with what changed. The style guide exempts such entries from naming a
+place in the code, because there is none, but not from stating what changed for
+the reader.
 
 ### Changed
 
@@ -83,13 +109,12 @@ because there is none, but not from stating what changed for the reader.
   and macOS both. The entries span 1.2.0, 1.2.1, 1.3.0 and 1.3.1; no other text
   in those sections changed.
 
-## [1.3.3] - 2026-08-27: Changelog rewritten against the style guide, three counts corrected
+## [1.3.3] - 2026-08-27: Changelog rewritten against the style guide
 
 Editorial pass over the whole file against a written style guide, not by feel.
 Nothing in the scripts, the systemd templates, the CA configuration or the
-monitoring rules changed; a CA in operation needs no action. Three statements of
-fact are corrected here, all of them counts that had stood since the 1.0.0
-release in January because nobody counted them.
+monitoring rules changed; a CA in operation needs no action. Statements of fact
+are corrected where the code contradicted them; they are listed below.
 
 The rules live outside this repository and apply to all repositories of this
 portfolio. They were settled after reading Keep a Changelog, Common Changelog
@@ -509,7 +534,8 @@ the missing tags retroactively - a tag push triggers .github/workflows/release.y
 and would publish a release for a version that never shipped.
 -->
 
-[Unreleased]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.6...HEAD
+[Unreleased]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.7...HEAD
+[1.3.7]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.6...v1.3.7
 [1.3.6]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.5...v1.3.6
 [1.3.5]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.3...v1.3.4
