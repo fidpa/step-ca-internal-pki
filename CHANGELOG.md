@@ -14,7 +14,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Grafana dashboard templates for certificate expiry visualization
 - mTLS examples for service-to-service authentication
 
-## [1.3.4] - 2026-08-27
+## [1.3.5] - 2026-08-27: Release titles survive the next tag push
+
+Every release since 1.0.0 was published by `.github/workflows/release.yml`, which handed
+`softprops/action-gh-release` a body but no name. The action then falls back to the tag,
+so each release page opened with the bare version that the release list already shows
+next to it, and the title had to be corrected by hand afterwards. Three releases in a row
+were corrected that way. The workflow now derives the title from the changelog itself,
+which removes the manual step rather than repeating it.
+
+### Changed
+
+- **A tag push now produces the finished release title, with no manual correction.**
+  `release.yml` reads the headline from the section heading it already cuts the body from
+  and passes it to the action as `name:`, so title and body come from one source and
+  cannot drift apart. Without a headline the workflow logs a warning and falls back to the
+  bare tag, which is the old behaviour rather than a failure
+- **Every version heading carries its headline** (`## [X.Y.Z] - YYYY-MM-DD: <headline>`).
+  The headlines are the titles published on 27 August 2026, moved into the file that the
+  workflow reads. This is what makes the change above work: the heading is now the single
+  place a release title comes from
+- **The body extraction anchors on the start of the line.** It used
+  `sed -n "/^## \[${VERSION}\]/,/^## \[/p"`, and now that headings carry prose, a version
+  number appearing inside a headline could match before the real heading does. The `awk`
+  form tests `index($0, head) == 1`
+
+### Fixed
+
+- **The version in `README.md` had been stuck at 1.3.2 for two releases.** Both the badge
+  in line 3 and the footer line said `1.3.2` while 1.3.3 and 1.3.4 were published;
+  `git show v1.3.3:README.md` and `git show v1.3.4:README.md` carry the stale value. Both
+  now read 1.3.5. The rest of the footer was counted and left as it stood: 8 scripts
+  (`git ls-files | grep -c '.sh$'`), 7 core docs under `docs/`, 12 READMEs beside the
+  top-level one
+
+## [1.3.4] - 2026-08-27: Documentation entries lead with the effect, not the file name
 
 Follow-up to the editorial pass in 1.3.3. Seven entries had been left with a file
 name as their opening sentence, all of them documentation or repository
@@ -33,7 +67,7 @@ because there is none, but not from stating what changed for the reader.
   and macOS both. The entries span 1.2.0, 1.2.1, 1.3.0 and 1.3.1; no other text
   in those sections changed.
 
-## [1.3.3] - 2026-08-27
+## [1.3.3] - 2026-08-27: Changelog rewritten against the style guide, three counts corrected
 
 Editorial pass over the whole file against a written style guide, not by feel.
 Nothing in the scripts, the systemd templates, the CA configuration or the
@@ -113,7 +147,7 @@ Every measured value, path, function name and config variable in this file is
 unchanged. What changed is the order of the sentences, the tense, the
 punctuation and the four counts named above.
 
-## [1.3.2] - 2026-08-11
+## [1.3.2] - 2026-08-11: Documented script invocations work without bash
 
 ### Fixed
 
@@ -131,7 +165,7 @@ punctuation and the four counts named above.
   template meant to be copied and edited, not executed in place. No script
   content changed.
 
-## [1.3.1] - 2026-08-09
+## [1.3.1] - 2026-08-09: Root CA scripts covered by CI and release pages carry the changelog
 
 Housekeeping release. **No behavioral changes**: the scripts, the systemd unit
 templates, the CA configuration and the monitoring rules are byte-identical to
@@ -193,7 +227,7 @@ links. A CA already in operation needs no action.
 - **Local agent tooling can no longer be committed by accident.** `.gitignore`
   covers `.claude/` now.
 
-## [1.3.0] - 2026-07-03
+## [1.3.0] - 2026-07-03: Renewal failures become visible
 
 Lessons from a production review of the renewal pipeline: short journald
 retention had swallowed the nightly renewal logs, and a cert-consumer host had
@@ -257,7 +291,7 @@ run without expiry metrics for months. All changes are environment-neutral.
   `CODE_OF_CONDUCT.md` and `docs/ARCHITECTURE.md` use `-` list markers and
   `_italic_` now. Formatting only, no content changes.
 
-## [1.2.1] - 2026-05-13
+## [1.2.1] - 2026-05-13: Why the setup needs two offline sessions
 
 Patch release. Documentation only, no behavioral changes and no script changes.
 
@@ -286,7 +320,7 @@ Patch release. Documentation only, no behavioral changes and no script changes.
   `docs/ARCHITECTURE.md`, `docs/BACKUP.md` and `docs/CLIENT_TRUST.md` were
   translated to English, so the whole public repository reads in one language.
 
-## [1.2.0] - 2026-05-13
+## [1.2.0] - 2026-05-13: Scripted Root CA sessions and DNS coexistence patterns
 
 Lessons collected while deploying step-ca alongside an existing Let's Encrypt,
 acme-dns, Tailscale and Active Directory stack. All additions are
@@ -344,7 +378,7 @@ environment-neutral and carry no organization-specific identifiers.
   Step 3 of `docs/SETUP.md` now instructs creating that file, empty or filled
   with a passphrase. The same symptom was added to `docs/TROUBLESHOOTING.md`.
 
-## [1.1.0] - 2026-01-21
+## [1.1.0] - 2026-01-21: CI linting and startup dependency checks
 
 ### Added
 - **CI/CD Pipeline**: GitHub Actions workflows for automated code quality checks
@@ -368,7 +402,7 @@ environment-neutral and carry no organization-specific identifiers.
   - Volumes remain writable, so SQLite database functionality is preserved
   - Reduces attack surface if the container is compromised
 
-## [1.0.1] - 2026-01-20
+## [1.0.1] - 2026-01-20: Abuse reports go through GitHub Issues
 
 ### Changed
 
@@ -376,7 +410,7 @@ environment-neutral and carry no organization-specific identifiers.
   `CODE_OF_CONDUCT.md` named an email address as the reporting channel; it names
   GitHub Issues now, which is the channel this repository actually watches.
 
-## [1.0.0] - 2026-01-20
+## [1.0.0] - 2026-01-20: Two-tier internal PKI with auto-renewal and expiry monitoring
 
 First production release.
 
@@ -434,7 +468,7 @@ First production release.
 - **ACME Protocol**: not supported, a CSR has to be created by hand
 - **HSM Support**: requires step-ca Enterprise Edition
 
-## [0.9.0] - 2026-01-15
+## [0.9.0] - 2026-01-15: First development release of the two-tier CA
 
 ### Added
 - Initial development release
@@ -459,7 +493,8 @@ the missing tags retroactively - a tag push triggers .github/workflows/release.y
 and would publish a release for a version that never shipped.
 -->
 
-[Unreleased]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.4...HEAD
+[Unreleased]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.5...HEAD
+[1.3.5]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.1...v1.3.2

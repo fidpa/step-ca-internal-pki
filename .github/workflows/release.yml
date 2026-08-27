@@ -19,19 +19,46 @@ jobs:
           fetch-depth: 0
 
       - name: Extract changelog section
+        id: changelog
         run: |
           VERSION="${GITHUB_REF#refs/tags/v}"
-          sed -n "/^## \[${VERSION}\]/,/^## \[/p" CHANGELOG.md \
-            | sed '1d' | sed '/^## \[/d' > release-notes.md
+          HEADING="## [${VERSION}]"
+
+          # The anchor tests the start of the line. A substring search would match a
+          # heading whose headline merely mentions the version and cut out the wrong
+          # section.
+          awk -v head="$HEADING" '
+            index($0, head) == 1 { p=1; next }
+            /^## \[/ { if (p) exit }
+            p { print }
+          ' CHANGELOG.md > release-notes.md
           if [ ! -s release-notes.md ]; then
             echo "::error::No CHANGELOG section for ${VERSION}"
             exit 1
           fi
           wc -m release-notes.md
 
+          # Release title: "vX.Y.Z: <headline>", taken from the trailing part of the
+          # section heading after the date. Without a name, action-gh-release falls back
+          # to the bare tag, which repeats the version already shown next to it.
+          HEADLINE=$(awk -v head="$HEADING" '
+            index($0, head) == 1 {
+              if (match($0, /- [0-9]{4}-[0-9]{2}-[0-9]{2}: /)) {
+                print substr($0, RSTART + RLENGTH); exit
+              }
+            }
+          ' CHANGELOG.md)
+          if [ -n "$HEADLINE" ]; then
+            echo "title=v${VERSION}: ${HEADLINE}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::No headline in the [${VERSION}] heading, falling back to the tag name"
+            echo "title=v${VERSION}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          name: ${{ steps.changelog.outputs.title }}
           body_path: release-notes.md
           draft: false
           prerelease: ${{ contains(github.ref, '-') }}
