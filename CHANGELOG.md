@@ -14,6 +14,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Grafana dashboard templates for certificate expiry visualization
 - mTLS examples for service-to-service authentication
 
+## [1.3.6] - 2026-08-27: Published body matches the changelog section byte for byte
+
+The title extraction added in 1.3.5 worked on the first tag that used it, and the check
+that followed found the one remaining difference between a published body and the section
+it comes from: a single leading blank line, contributed by the workflow rather than by the
+changelog.
+
+### Fixed
+
+- **The release body no longer starts with a blank line.** `release.yml` printed the empty
+  line that follows a section heading, so comparing the published body against its
+  changelog section byte for byte reported a difference on every release, while GitHub
+  rendered both identically. The extraction now drops leading blank lines
+  (`sed -e '/./,$!d'`). This release is the first one produced with it; the body of 1.3.5
+  was corrected in place with `gh release edit`
+
 ## [1.3.5] - 2026-08-27: Release titles survive the next tag push
 
 Every release since 1.0.0 was published by `.github/workflows/release.yml`, which handed
@@ -493,7 +509,8 @@ the missing tags retroactively - a tag push triggers .github/workflows/release.y
 and would publish a release for a version that never shipped.
 -->
 
-[Unreleased]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.5...HEAD
+[Unreleased]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.6...HEAD
+[1.3.6]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.5...v1.3.6
 [1.3.5]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.2...v1.3.3

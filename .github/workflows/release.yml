@@ -31,7 +31,7 @@ jobs:
             index($0, head) == 1 { p=1; next }
             /^## \[/ { if (p) exit }
             p { print }
-          ' CHANGELOG.md > release-notes.md
+          ' CHANGELOG.md | sed -e '/./,$!d' > release-notes.md
           if [ ! -s release-notes.md ]; then
             echo "::error::No CHANGELOG section for ${VERSION}"
             exit 1
