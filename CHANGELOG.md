@@ -14,6 +14,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Grafana dashboard templates for certificate expiry visualization
 - mTLS examples for service-to-service authentication
 
+## [1.3.4] - 2026-08-27
+
+Follow-up to the editorial pass in 1.3.3. Seven entries had been left with a file
+name as their opening sentence, all of them documentation or repository
+metadata. The style guide exempts such entries from naming a place in the code,
+because there is none, but not from stating what changed for the reader.
+
+### Changed
+
+- **Seven documentation entries lead with what changed instead of with a file
+  name.** They opened with a bold `docs/BACKUP.md`, `systemd/README.md`,
+  `docs/TROUBLESHOOTING.md`, `docs/SETUP.md`, `docs/ARCHITECTURE.md`,
+  `CODE_OF_CONDUCT.md` or `.gitignore` and left the consequence to the reader.
+  Covering the paragraph, none of the seven bold lines made a statement. Each
+  now names the effect and keeps the file in the paragraph below: the exFAT
+  entry, for instance, opens with the offline USB stick being readable on Linux
+  and macOS both. The entries span 1.2.0, 1.2.1, 1.3.0 and 1.3.1; no other text
+  in those sections changed.
+
 ## [1.3.3] - 2026-08-27
 
 Editorial pass over the whole file against a written style guide, not by feel.
@@ -171,8 +190,8 @@ links. A CA already in operation needs no action.
   referenced a `script-audit.sh` that does not exist here; it describes this
   repository now.
 
-- **`.gitignore`**: `.claude/` added, so local agent tooling cannot be committed
-  by accident.
+- **Local agent tooling can no longer be committed by accident.** `.gitignore`
+  covers `.claude/` now.
 
 ## [1.3.0] - 2026-07-03
 
@@ -234,9 +253,9 @@ run without expiry metrics for months. All changes are environment-neutral.
   after a reboot a root-owned `0644` lockfile shut out anyone signing without
   root, for example over SSH.
 
-- **`CODE_OF_CONDUCT.md` and `docs/ARCHITECTURE.md`**: Markdown style
-  normalization (`-` list markers, `_italic_`). Formatting only, no content
-  changes.
+- **Two documents follow the same Markdown style as the rest.**
+  `CODE_OF_CONDUCT.md` and `docs/ARCHITECTURE.md` use `-` list markers and
+  `_italic_` now. Formatting only, no content changes.
 
 ## [1.2.1] - 2026-05-13
 
@@ -263,9 +282,9 @@ Patch release. Documentation only, no behavioral changes and no script changes.
   added in v1.2.0 but missing from Quick Navigation and Reading Order in
   `docs/README.md`. The stale Document Status table there was removed.
 
-- **`docs/ARCHITECTURE.md`, `docs/BACKUP.md` and `docs/CLIENT_TRUST.md`**: the
-  TL;DRs were translated from German to English, for language consistency across
-  the public repository.
+- **Three documents no longer open in German.** The TL;DRs of
+  `docs/ARCHITECTURE.md`, `docs/BACKUP.md` and `docs/CLIENT_TRUST.md` were
+  translated to English, so the whole public repository reads in one language.
 
 ## [1.2.0] - 2026-05-13
 
@@ -290,7 +309,8 @@ environment-neutral and carry no organization-specific identifiers.
   conflict, Tailscale and WireGuard MagicDNS, Windows Active Directory DNS, and
   multiple step-ca instances per site.
 
-- **`docs/TROUBLESHOOTING.md`** gained a DNS and network coexistence section
+- **The DNS conflicts that break a fresh install have a symptom entry.**
+  `docs/TROUBLESHOOTING.md` gained a DNS and network coexistence section
   covering port 53 conflicts with acme-dns, PiHole, AdGuard or dnsmasq with
   three resolution strategies; dnsmasq breaking Tailscale MagicDNS through
   implicit binding to VPN interfaces, with the `bind-interfaces` and explicit
@@ -300,19 +320,20 @@ environment-neutral and carry no organization-specific identifiers.
   health check stuck in "starting", which explains why `step ca health` stays
   there without bootstrapping and gives two solutions.
 
-- **`docs/SETUP.md` Prerequisites**: a Brew-PATH note for macOS non-login shells
-  (cron, SSH), where `step` and `gpg` are not in `$PATH` unless
-  `/opt/homebrew/bin` is prepended.
+- **A macOS cron or SSH job no longer fails with `step: command not found`.**
+  The Prerequisites of `docs/SETUP.md` carry a Brew-PATH note: in non-login
+  shells `step` and `gpg` are not in `$PATH` unless `/opt/homebrew/bin` is
+  prepended.
 
-- **`docs/BACKUP.md`**: an exFAT alternative for formatting the USB stick, for
-  cases where LUKS does not fit because the stick has to be readable on Linux
-  and macOS both. It documents the 11-character exFAT label limit and the
-  `._<filename>` AppleDouble sidecars macOS writes.
+- **The offline USB stick can be read on Linux and macOS both.**
+  `docs/BACKUP.md` documents exFAT as the alternative for cases where LUKS does
+  not fit, along with the two traps it brings: the 11-character exFAT label
+  limit and the `._<filename>` AppleDouble sidecars macOS writes.
 
-- **`systemd/README.md`**: a hardening section on the `ReadWritePaths=`
-  requirement when `ProtectSystem=strict` is combined with helpers that write
-  state files, with a drop-in example that avoids silent `Read-only file system`
-  failures.
+- **A hardened renewal unit no longer fails with `Read-only file system`.**
+  `systemd/README.md` has a hardening section on the `ReadWritePaths=`
+  requirement when `ProtectSystem=strict` meets a helper that writes state
+  files, with a drop-in example.
 
 ### Fixed
 
@@ -438,7 +459,8 @@ the missing tags retroactively - a tag push triggers .github/workflows/release.y
 and would publish a release for a version that never shipped.
 -->
 
-[Unreleased]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.3...HEAD
+[Unreleased]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.4...HEAD
+[1.3.4]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.0...v1.3.1
