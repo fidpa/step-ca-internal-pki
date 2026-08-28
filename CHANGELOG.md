@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Grafana dashboard templates for certificate expiry visualization
 - mTLS examples for service-to-service authentication
 
+## [1.3.8] - 2026-08-28: GitHub identifies the project as MIT-licensed
+
+### Changed
+
+- **The repository page shows the MIT licence, and licence-filtered searches
+  find the project.** `LICENSE` carried the repository URL on its own line
+  under the copyright notice. GitHub reads a licence text with an extra line as
+  modified and reports `NOASSERTION`, which leaves the licence field on the
+  repository page empty. The line is gone; the MIT text and the copyright
+  notice are byte-for-byte unchanged, and the URL is still in `README.md`.
+
 ## [1.3.7] - 2026-08-27: Editorial sections state what holds, not how much did not
 
 A release page says what now holds. How long something was wrong, how many statements a
@@ -534,7 +545,8 @@ the missing tags retroactively - a tag push triggers .github/workflows/release.y
 and would publish a release for a version that never shipped.
 -->
 
-[Unreleased]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.7...HEAD
+[Unreleased]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.8...HEAD
+[1.3.8]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.7...v1.3.8
 [1.3.7]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.6...v1.3.7
 [1.3.6]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.5...v1.3.6
 [1.3.5]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.4...v1.3.5
