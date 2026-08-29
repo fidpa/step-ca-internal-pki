@@ -14,6 +14,98 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Grafana dashboard templates for certificate expiry visualization
 - mTLS examples for service-to-service authentication
 
+## [1.3.9] - 2026-08-30: Documented commands run and the guides match the code
+
+### Security
+
+- **The documentation no longer promises revocation paths that do not exist.**
+  `docs/NGINX_TLS.md` described step-ca as having an OCSP responder "as of
+  v0.22.0+" and shipped a stapling configuration for it. step-ca has no OCSP
+  responder: Smallstep's own documentation calls the built-in revocation support
+  a minimal CRL server and points to their commercial product for OCSP, and
+  certificates signed the OpenSSL way carry no OCSP URL for a client to call.
+  The section explains why stapling stays off, the production checklist no
+  longer asks for it, and the troubleshooting entry names the log line instead
+  of sending the reader to an EST endpoint.
+- **Revocation reads the same in every document.** The feature list and the
+  security section of `README.md` advertised CRL distribution as working, and
+  the disaster-recovery procedures in `docs/ARCHITECTURE.md` and
+  `docs/TROUBLESHOOTING.md` told the reader to revoke and distribute a CRL. All
+  of them now point at the limitations box, which names the experimental status
+  of `revocation/` and the 90-day lifetime as the mitigation that actually
+  applies. Compromise recovery says what to do instead: rotate keys, swap the
+  chain, remove the old trust anchor by hand.
+- **`docs/ARCHITECTURE.md` describes the container that ships.**
+  `config/step-ca-stack.yml` sets `read_only: true` with a tmpfs on `/tmp`,
+  mounts config and secrets read-only, and publishes ports to the host only.
+  Rate limiting, client certificate authentication and CRL monitoring are marked
+  as absent, because nothing in this repository provides them.
+
+### Fixed
+
+- **The setup deploys.** `docs/SETUP.md` phase 3 started the container with
+  `docker compose up -d` in a directory whose only compose file is named
+  `step-ca-stack.yml`; `-f` is now part of the command, and the file is copied
+  there in the same step. `README.md` gained the same two lines, plus the note
+  that `ca.json` has to exist before the first start.
+- **Three commands in `docs/BACKUP.md` work as written.** Key verification uses
+  `openssl pkey`, which reads the ECDSA CA keys that `openssl rsa` rejects.
+  Certificate issuance no longer passes a `--dry-run` flag that
+  `step ca certificate` does not have. The CRL is fetched from the API port over
+  HTTP, because there is no `step ca crl` subcommand.
+- **Timers and units carry the names the setup creates.** Renewal units are
+  `step-ca-renew-<service>` in `docs/TROUBLESHOOTING.md` and `README.md`, the
+  convention `docs/SETUP.md` defines. "Check Logs" reads the container log
+  rather than a `step-ca.service` unit that does not exist. The offsite backup
+  timer in `docs/BACKUP.md` has one `OnCalendar=` line, so it fires once a day
+  instead of at midnight and at 04:00.
+- **`docs/CLIENT_TRUST.md` stops recommending steps that undo themselves.**
+  Appending to the generated `/etc/ssl/certs/ca-certificates.crt` survives only
+  until the next `update-ca-certificates` run. The PowerShell snippet no longer
+  assigns to `$PROFILE`, which is a PowerShell automatic variable. The Firefox
+  profile search covers the snap location that Ubuntu 22.04 and newer use.
+- **The `#known-limitations` link resolves.** The emoji in the heading kept
+  GitHub from generating that anchor.
+- **`See Also` points at repositories that exist**: `linux-monitoring-templates`,
+  and `ubuntu-server-security` with its 14 hardening components.
+
+### Changed
+
+- **Every number in `README.md` comes from the code.** The 90-day lifetime is
+  `CERT_VALIDITY_DAYS` in `examples/cert-request-template.sh`, not a step-ca
+  default; the encrypted Root key is `root_ca.key.gpg`; the Intermediate is
+  valid five years (`INTERMEDIATE_VALIDITY=43800h`) and the Root ten; the expiry
+  alerts are Prometheus rules, and the Grafana dashboard carries none. The
+  line-count estimates in the component table are gone, and so is the mention of
+  Telegram notifications, which exist in no file of this repository.
+- **`docs/SETUP.md` names the fork in the road.** The scripted path and the
+  manual path produce different filenames for the same material
+  (`root_ca.key.gpg` against `root_ca_key.pem.gpg`), which now stands in the
+  guide rather than waiting to be discovered. The 3-2-1 section lists three
+  copies on two media types, and says why the copy on the production server does
+  not count towards the rule.
+- **The compliance sections say what an auditor would be shown.** The mapping in
+  `docs/ARCHITECTURE.md` no longer lists certificate pinning or RSA-2048 as
+  implemented, and names what is missing: revocation, key escrow, HSM storage,
+  audit logging around key usage. The PCI checklist in `docs/BACKUP.md` maps
+  backup practice to key-management requirements instead of mapping
+  cardholder-data requirements onto CA keys.
+- **`docs/README.md` describes the guides it links to.** The hub advertised a
+  Pi-hole pattern and split-horizon DNS; `docs/COEXISTENCE.md` covers acme-dns,
+  Tailscale MagicDNS, Active Directory DNS and multi-site namespace overlap.
+  That document's TL;DR names host port 9643, the port the stack publishes.
+- **English throughout.** The TL;DR sections of `docs/NGINX_TLS.md` and
+  `docs/TROUBLESHOOTING.md` were German; the repository is English.
+- **`README.md` reads as prose, not as a brochure.** The duplicate "Use Cases"
+  and "When to Use This System" sections are one, feature bullets name what is
+  there instead of claiming a posture, the compatibility list gained a
+  "Not supported" tier, the alternatives table carries this repository's own
+  weakness in the same column as everyone else's, and the production section
+  states what two hosts over eight months show and what they do not.
+- **Deprecation notes where a reader would otherwise copy the old form**:
+  `listen 443 ssl http2;` against nginx 1.25.1 and newer, and
+  `X-XSS-Protection`, which no current browser acts on.
+
 ## [1.3.8] - 2026-08-28: GitHub identifies the project as MIT-licensed
 
 ### Changed
@@ -545,7 +637,8 @@ the missing tags retroactively - a tag push triggers .github/workflows/release.y
 and would publish a release for a version that never shipped.
 -->
 
-[Unreleased]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.8...HEAD
+[Unreleased]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.9...HEAD
+[1.3.9]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.8...v1.3.9
 [1.3.8]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.7...v1.3.8
 [1.3.7]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.6...v1.3.7
 [1.3.6]: https://github.com/fidpa/step-ca-internal-pki/compare/v1.3.5...v1.3.6

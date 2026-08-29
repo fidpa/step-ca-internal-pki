@@ -1,6 +1,6 @@
 # Documentation
 
-Comprehensive guides for step-ca Internal PKI setup, operation, and troubleshooting.
+Seven guides for setting up, running and debugging the PKI.
 
 ## Quick Navigation
 
@@ -11,7 +11,7 @@ Comprehensive guides for step-ca Internal PKI setup, operation, and troubleshoot
 | [CLIENT_TRUST.md](CLIENT_TRUST.md) | Cross-platform Root CA installation | All users |
 | [NGINX_TLS.md](NGINX_TLS.md) | nginx TLS termination patterns | Developers |
 | [BACKUP.md](BACKUP.md) | 3-2-1 backup strategy for PKI | Admins |
-| [COEXISTENCE.md](COEXISTENCE.md) | Run step-ca alongside acme-dns, Pi-hole, AD DNS | Admins |
+| [COEXISTENCE.md](COEXISTENCE.md) | Run step-ca alongside acme-dns, Tailscale MagicDNS, AD DNS | Admins |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Common issues and solutions | All users |
 
 ## Reading Order
@@ -45,9 +45,10 @@ signing) and the online intermediate step in between.
 PKI design documentation covering:
 - Two-tier CA hierarchy rationale
 - Why two offline sessions are required (and why only two)
+- Why revocation does not work in the default workflow
 - Security boundaries
 - Certificate lifecycle management
-- Compliance mapping (PCI DSS, SOC 2, ISO 27001)
+- What the design contributes to a PCI DSS / SOC 2 / ISO 27001 audit, and what it does not
 
 ### CLIENT_TRUST.md
 
@@ -76,11 +77,11 @@ PKI backup and disaster recovery:
 
 ### COEXISTENCE.md
 
-Running step-ca alongside existing services on port 53 or 80:
-- step-ca with acme-dns (port 53 conflict)
-- step-ca with Pi-hole / dnsmasq
-- step-ca with Active Directory DNS
-- Split-horizon DNS patterns
+Running step-ca where port 53 is already taken:
+- acme-dns on the same host (moving it off port 53)
+- dnsmasq next to Tailscale / WireGuard MagicDNS (`bind-interfaces`)
+- Active Directory DNS (conditional forwarders, `stop-dns-rebind`)
+- Multiple step-ca instances across sites (namespace overlap)
 
 ### TROUBLESHOOTING.md
 

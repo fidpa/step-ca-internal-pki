@@ -1,51 +1,66 @@
 # step-ca Internal PKI
 
-![Version](https://img.shields.io/badge/version-1.3.7-blue)
+![Version](https://img.shields.io/badge/version-1.3.9-blue)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Linux-lightgrey?logo=linux)
 ![Bash](https://img.shields.io/badge/Bash-4.0%2B-blue?logo=gnu-bash)
 ![Docker](https://img.shields.io/badge/Docker-20.10%2B-blue?logo=docker)
 ![CI](https://github.com/fidpa/step-ca-internal-pki/actions/workflows/lint.yml/badge.svg)
 ![Status](https://img.shields.io/badge/status-production-brightgreen)
-![step-ca](https://img.shields.io/badge/step--ca-production--ready-orange)
+![step-ca](https://img.shields.io/badge/step--ca-0.29.0-orange)
 ![Last Commit](https://img.shields.io/github/last-commit/fidpa/step-ca-internal-pki)
 
-Production-ready PKI (Public Key Infrastructure) setup with [Smallstep's step-ca](https://smallstep.com/docs/step-ca) Certificate Authority. Includes scripts, documentation, and service integration examples for internal HTTPS without browser warnings.
+A two-tier internal PKI built on [Smallstep's step-ca](https://smallstep.com/docs/step-ca):
+scripts, documentation and service integration examples for internal HTTPS without
+browser warnings.
 
-**The Problem**: Self-hosted services like Vaultwarden, Nextcloud, or Portainer typically run on IP addresses (`https://192.168.1.50:8443`) with browser security warnings. Let's Encrypt doesn't work for internal domains. Manual OpenSSL certificate management is complex and doesn't scale. After setting up a production PKI for 6+ internal services with auto-renewal and monitoring, I've extracted the complete setup into this repository.
+Self-hosted services usually answer on an IP address (`https://192.168.1.50:8443`),
+and every browser flags them. Let's Encrypt cannot help, because internal names have
+no public DNS, and hand-rolled OpenSSL certificates stop scaling at the third service.
+This repository is the setup behind six internal services, extracted with its renewal
+timers, monitoring and client trust distribution intact.
 
 ## Features
 
-- **Two-Tier PKI** - Offline Root CA + Online Intermediate CA for enhanced security
-- **Battle-Tested Scripts** - Air-gap verification, decrypt-verify, cleanup-trap, cross-platform secure-delete (`scripts/`)
-- **Auto-Renewal** - systemd timers for automatic certificate renewal (30-day threshold, `--force` re-issue)
-- **Failure Notifications** - `OnFailure=` hook template: a silently failing nightly renewal notifies you instead of surfacing as a browser warning weeks later
-- **Prometheus Monitoring** - Certificate expiry metrics and alerts
-- **Service Integration** - Examples for Vaultwarden, Nextcloud, Portainer, nginx
-- **⚠️ CRL Support** - Certificate Revocation Lists (EXPERIMENTAL - see [Limitations](#known-limitations))
-- **Client Trust** - Cross-platform Root CA installation (macOS, Linux, Windows)
-- **Atomic Deployment** - Race-condition-free certificate deployment with flock locking
-- **NTP Monitoring** - Time synchronization validation (critical for certificate validity)
-- **Coexistence Patterns** - Documented integration with acme-dns, Tailscale/WireGuard MagicDNS, Active Directory DNS ([`docs/COEXISTENCE.md`](docs/COEXISTENCE.md))
-- **Production-Tested** - Scripts and configs battle-tested in production
+- **Two-tier PKI** - offline Root CA signs an online Intermediate CA; the Root key never reaches the production host
+- **Air-gap verification** - `scripts/create-root-ca.sh` probes 8.8.8.8, 1.1.1.1 and an HTTPS endpoint, and aborts if any of them answers
+- **Offline signing workflow** - Intermediate key and CSR on the server, signature on the air-gapped machine, transport over USB
+- **Auto-renewal** - systemd timers, renewal below 30 days left (`RENEWAL_THRESHOLD`), `--force` to re-issue with new SANs
+- **Failure notifications** - `OnFailure=` hook template: a silently failing nightly renewal reaches you instead of surfacing as a browser warning weeks later
+- **Prometheus monitoring** - certificate expiry metrics plus alert rules at 30, 7 and 1 day
+- **Service integration** - working examples for Vaultwarden, Nextcloud, Portainer and a generic nginx proxy
+- **Client trust** - Root CA installation for macOS, Linux and Windows ([`docs/CLIENT_TRUST.md`](docs/CLIENT_TRUST.md))
+- **Atomic deployment** - certificates are written as `.new` files, verified, then moved into place; `flock` serialises concurrent renewals
+- **NTP monitoring** - time sync validation, because a skewed clock invalidates every certificate
+- **Coexistence patterns** - documented integration with acme-dns, Tailscale/WireGuard MagicDNS and Active Directory DNS ([`docs/COEXISTENCE.md`](docs/COEXISTENCE.md))
+- **Experimental: CRL support** - see [Known Limitations](#known-limitations)
 
-## ⚠️ Known Limitations
+## Known Limitations
 
-> **IMPORTANT**: The default workflow uses **direct OpenSSL signing**, which means:
+> **IMPORTANT**: The default workflow signs service certificates with OpenSSL
+> directly, using the Intermediate CA key. That has consequences:
 >
-> - ❌ **Revocation is NOT functional** - Certificates cannot be revoked via `step ca revoke`
-> - ❌ Certificates are NOT tracked in step-ca's database (BadgerDB)
-> - ✅ **Mitigation**: Short-lived certificates (90 days) minimize exposure window
+> - **Revocation does not work.** Certificates cannot be revoked via `step ca revoke`.
+> - **Certificates are not tracked** in step-ca's database (BadgerDB).
+> - **The CRL tooling in `revocation/` is experimental** and does not close this gap.
+>   Where the feature list and the security section mention CRLs, they describe the
+>   architecture, not a working revocation path.
+> - **Mitigation**: 90-day certificates keep the exposure window short. A key that
+>   leaks is still valid until it expires; plan for that, or move issuance to
+>   step-ca provisioners.
 >
-> See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#-critical-revocation-limitations) for details and workarounds.
+> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#-critical-revocation-limitations)
+> has the details and the workarounds.
 
 ## Quick Start
 
 ```bash
-# Clone the repository
 git clone https://github.com/fidpa/step-ca-internal-pki.git
 cd step-ca-internal-pki
 ```
+
+The full walkthrough is [docs/SETUP.md](docs/SETUP.md); the steps below are the
+short form.
 
 ### Prerequisites
 
@@ -55,26 +70,30 @@ cd step-ca-internal-pki
 - Root access for certificate deployment
 
 **Air-gapped machine (Root CA + Intermediate signing):**
-- `step` CLI ≥ 0.25 — `brew install step` (macOS) or [smallstep.com/docs](https://smallstep.com/docs/step-cli/installation)
-- `gpg` ≥ 2.2 — `brew install gnupg` / `apt install gnupg`
-- `coreutils` (macOS only, for stronger `shred`) — `brew install coreutils`
+- `step` CLI >= 0.25 - `brew install step` (macOS) or [smallstep.com/docs](https://smallstep.com/docs/step-cli/installation)
+- `gpg` >= 2.2 - `brew install gnupg` / `apt install gnupg`
+- `coreutils` (macOS only, for `gshred`) - `brew install coreutils`
 
-> **macOS Brew-PATH gotcha**: Non-login SSH sessions and cron jobs don't auto-source `~/.zshrc`. The provided scripts prepend `/opt/homebrew/bin:/usr/local/bin` to `$PATH` automatically.
+> **macOS Brew-PATH gotcha**: Non-login SSH sessions and cron jobs don't auto-source
+> `~/.zshrc`. The scripts prepend `/opt/homebrew/bin:/usr/local/bin` to `$PATH`
+> themselves.
 
-### 1. Create Root CA (Offline, on air-gapped machine)
+### 1. Create Root CA (offline, on the air-gapped machine)
 
 ```bash
-# Run on air-gapped laptop (Wi-Fi off, Ethernet unplugged, VPN disconnected).
-# Script aborts if it detects network connectivity.
+# Wi-Fi off, Ethernet unplugged, VPN disconnected.
+# The script aborts if it reaches the network.
 CA_NAME="My Internal Root CA 2026" ./scripts/create-root-ca.sh
 
 # Output: ~/.ca-creation-YYYYMMDD-HHMMSS/
-#   - root_ca.crt           → copy to production server
-#   - root_ca.key.gpg       → keep on USB stick in safe (3-2-1 rule)
+#   - root_ca.crt           -> copy to production server
+#   - root_ca.key.gpg       -> keep on USB stick in safe (3-2-1 rule)
 #   - checksums.sha256
 ```
 
-### 2. Generate Intermediate CSR (on production server)
+Defaults: ECDSA, 10 years validity (`CA_VALIDITY_HOURS=87600`).
+
+### 2. Generate Intermediate CSR (on the production server)
 
 ```bash
 INTERMEDIATE_CN="My Internal Intermediate CA 2026" \
@@ -83,24 +102,28 @@ INTERMEDIATE_C="DE" \
   ./scripts/generate-intermediate-csr.sh
 
 # Output:
-#   /opt/step-ca/secrets/intermediate_ca_key   (ECDSA P-256)
-#   /tmp/intermediate_ca.csr                   → transport to air-gapped machine
+#   /opt/step-ca/secrets/intermediate_ca_key   (ECDSA P-256, mode 600, owner 1000:1000)
+#   /tmp/intermediate_ca.csr                   -> transport to air-gapped machine
 ```
 
-### 3. Sign Intermediate (back on air-gapped machine)
+### 3. Sign the Intermediate (back on the air-gapped machine)
 
 ```bash
 # Insert USB with root_ca.crt, root_ca.key.gpg, intermediate_ca.csr
 USB_MOUNT="/Volumes/USB" ./scripts/sign-intermediate-ca.sh
 
-# Output written to USB:
-#   intermediate_ca.crt      → transport back to production server
+# Written back to the USB stick:
+#   intermediate_ca.crt            -> transport to production server
+#   intermediate-checksums.sha256
 ```
+
+Default validity is 5 years (`INTERMEDIATE_VALIDITY=43800h`), with
+`basicConstraints=CA:TRUE,pathlen:0`.
 
 ### 4. Deploy step-ca
 
 ```bash
-# Install signed intermediate + create empty password file (REQUIRED, see Phase 3 docs)
+# Install signed intermediate + create empty password file (REQUIRED, see docs/SETUP.md)
 sudo install -o 1000 -g 1000 -m 644 intermediate_ca.crt /opt/step-ca/certs/
 sudo install -o 1000 -g 1000 -m 600 /dev/null /opt/step-ca/secrets/password
 
@@ -108,193 +131,177 @@ sudo install -o 1000 -g 1000 -m 600 /dev/null /opt/step-ca/secrets/password
 sudo install -m 644 root_ca.crt /usr/local/share/ca-certificates/my-internal-root-ca.crt
 sudo update-ca-certificates
 
-# Deploy container
+# Deploy container. The image carries no DOCKER_STEPCA_INIT_* variables:
+# /opt/step-ca/config/ca.json must exist before the first start (docs/SETUP.md, phase 3).
+sudo install -m 644 config/step-ca-stack.yml /opt/step-ca/
 cd /opt/step-ca && docker compose -f step-ca-stack.yml up -d
-curl -k https://localhost:9643/health   # → {"status":"ok"}
+curl -k https://localhost:9643/health   # -> {"status":"ok"}
 ```
 
-### 5. Request Service Certificate
+### 5. Request a service certificate
 
 ```bash
-# Customize the template for your service
 cp examples/cert-request-template.sh /tmp/myservice-cert-request.sh
-# Edit DNS_SANS and IP_SANS
+# Edit SERVICE_NAME, DNS_SANS and IP_SANS
 
-# Run as root
 sudo /tmp/myservice-cert-request.sh
 # Output: /etc/ssl/step-ca/myservice.{crt,key} + myservice-fullchain.crt
 ```
 
-### 6. Configure Auto-Renewal
+Certificates are valid for 90 days (`CERT_VALIDITY_DAYS` in the template).
+
+### 6. Configure auto-renewal
 
 ```bash
-# Install systemd timer
-cp systemd/step-ca-renew.service.template /etc/systemd/system/myservice-renew.service
-cp systemd/step-ca-renew.timer.template /etc/systemd/system/myservice-renew.timer
+# Naming convention: step-ca-renew-<service>
+cp systemd/step-ca-renew.service.template /etc/systemd/system/step-ca-renew-myservice.service
+cp systemd/step-ca-renew.timer.template /etc/systemd/system/step-ca-renew-myservice.timer
 
-# Edit environment variables in service file
+# Set SERVICE_NAME and SERVICE_RELOAD_CMD in the service file
 sudo systemctl daemon-reload
-sudo systemctl enable --now myservice-renew.timer
+sudo systemctl enable --now step-ca-renew-myservice.timer
 ```
 
-### 7. Set up Monitoring (Optional)
+### 7. Set up monitoring (optional)
 
 ```bash
-# Install cert-exporter
 cp monitoring/cert-exporter.sh /usr/local/bin/
 chmod +x /usr/local/bin/cert-exporter.sh
-
-# Configure for Prometheus textfile collector
-# See monitoring/README.md
+# Wire it into the Prometheus textfile collector: see monitoring/README.md
 ```
 
-## Use Cases
+## When to Use This
 
-- ✅ **Homelab Security** - Internal services with trusted HTTPS
-- ✅ **SMB Internal PKI** - Affordable alternative to enterprise PKI solutions
-- ✅ **Kubernetes TLS** - Local k3s/k8s clusters with internal certificates
-- ✅ **Development** - Local HTTPS development with trusted certificates
-- ✅ **IoT/Embedded** - Raspberry Pi, ESP32 with TLS
+**Good fit:**
+- Homelab and self-hosted services that need trusted HTTPS without public DNS
+- SMB internal PKI below roughly 100 devices, where enterprise PKI has no budget
+- Docker stacks that cannot use Let's Encrypt because they have no public domain
+- Local k3s/k8s clusters and IoT devices (Raspberry Pi, ESP32) speaking TLS
+- Learning PKI hands-on: Certificate Authority, chain of trust, mTLS
 
-## 🎯 When to Use This System
-
-**Perfect for:**
-- 🏠 **Homelab/Self-hosted** services needing trusted HTTPS without public DNS
-- 🔧 **SMB Internal PKI** (<100 devices, no budget for enterprise PKI)
-- 🐳 **Docker stacks** requiring TLS without Let's Encrypt (no public domains)
-- 🎓 **Learning PKI fundamentals** (Certificate Authority, TLS, mTLS)
-- 🌐 **IoT/Embedded** devices (Raspberry Pi, ESP32) with internal HTTPS
-
-**NOT recommended for:**
-- ☁️ **Public-facing services** → Use Let's Encrypt (free, automated, trusted by all browsers)
-- 🏢 **Enterprise PKI** (500+ devices) → Use HashiCorp Vault or commercial PKI solutions
-- 📱 **Mobile apps** requiring publicly trusted certificates → Let's Encrypt or commercial CA
-- 🔐 **Hardware Security Modules (HSM)** → Requires step-ca Enterprise Edition
-
-**Alternative solutions**: Let's Encrypt (public domains), HashiCorp Vault (enterprise scale), AWS Certificate Manager (cloud-only), commercial PKI (support contracts). See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed comparison.
+**Not recommended for:**
+- **Public-facing services** - Let's Encrypt is free, automated, and trusted by every browser out of the box
+- **Enterprise scale (500+ devices)** - HashiCorp Vault or a commercial PKI brings the lifecycle tooling this repo deliberately keeps small
+- **Mobile apps** needing publicly trusted certificates - a private Root CA cannot be installed on other people's phones
+- **HSM-backed keys** - that requires step-ca Enterprise Edition
+- **Anything that depends on revocation** - see [Known Limitations](#known-limitations)
 
 ## Key Concepts
 
-### The Two-Tier PKI Architecture
-
-**Most important design decision in this project**:
+### The two-tier architecture
 
 ```
-Root CA (Offline)
-    ↓ Signs
-Intermediate CA (Online, step-ca)
-    ↓ Issues
-Service Certificates (Auto-renewed)
+Root CA (offline)
+    | signs
+Intermediate CA (online, step-ca)
+    | issues
+Service certificates (auto-renewed)
 ```
 
-**Why Two-Tier instead of Single-Tier**:
-- **Security**: Root CA private key NEVER touches production (air-gapped)
-- **Compromise Recovery**: If Intermediate CA compromised, only reissue Intermediate + service certs (NOT all clients)
-- **Compliance**: Meets PCI DSS, SOC 2, ISO 27001 requirements
-- **Operational Flexibility**: Root CA only needed for Intermediate renewal (~every 2-5 years)
+The Root CA key is generated on an air-gapped machine, GPG-encrypted, and never
+copied to the server; `create-root-ca.sh` refuses to run while the machine has
+network. What lives in production is the Intermediate key, and that changes what a
+break-in costs: if the Intermediate is compromised, you re-issue the Intermediate and
+the service certificates, while every client keeps trusting the same Root. If the Root
+were online and fell, every client would have to install a new trust anchor by hand.
 
-**Alternative**: Single-Tier PKI (Root CA issues certs directly) → Root CA must be online 24/7, higher compromise risk.
+Two tiers are also what PCI DSS, SOC 2 and ISO 27001 audits expect of an internal CA.
+That is a statement about the architecture, not a certification of this repository:
+nothing here has been audited.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for technical deep dive.
+The price is one extra offline session every five years, when the Intermediate needs
+a new signature. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) works through the
+alternatives, including why three tiers are not worth it here.
 
-### The Offline Root CA Pattern
+### The offline Root CA in practice
 
-**Critical for production PKI**:
-
-1. **Air-gapped Machine**: Raspberry Pi with no WiFi/Ethernet (USB disabled in firmware)
-2. **GPG Encryption**: `root_ca_key.pem.gpg` (encrypted private key)
-3. **Multiple Backups**: 3-2-1 rule (3 copies, 2 media types, 1 offsite)
-4. **Physical Security**: Locked safe, multi-person authorization
-
-**Why Offline**:
-- Root CA compromise = re-trust all clients (catastrophic)
-- Online exposure = attack surface
-- Offline = ONLY used for Intermediate CA renewal (every 2-5 years)
+1. **Air-gapped machine**: a spare laptop or Raspberry Pi with radios off and cable unplugged. The script checks by probing 8.8.8.8, 1.1.1.1 and an HTTPS endpoint before it touches a key.
+2. **Encrypted at rest**: the private key leaves the script only as `root_ca.key.gpg` (symmetric GPG), and the plaintext key is wiped with `shred`, `gshred` or `rm -P`.
+3. **Multiple backups**: 3-2-1 rule, three copies on two media types with one offsite ([docs/BACKUP.md](docs/BACKUP.md)).
+4. **Physical security**: the USB stick belongs in a safe, not in a drawer.
 
 ## Repository Structure
 
 ```
 step-ca-internal-pki/
-├── config/               # Docker Compose stack configuration
-│   ├── README.md         # Configuration guide
-│   └── step-ca-stack.yml # step-ca container deployment
-├── scripts/              # Battle-tested PKI lifecycle scripts (v1.2.0+)
-│   ├── README.md         # Scripts overview + workflow diagram
-│   ├── create-root-ca.sh           # Offline Root CA (air-gap verified)
-│   ├── generate-intermediate-csr.sh # Server-side Intermediate key + CSR
-│   └── sign-intermediate-ca.sh     # Offline Intermediate signing
-├── docs/                 # Documentation (7 guides)
-│   ├── README.md         # Navigation hub
-│   ├── SETUP.md          # Installation guide
-│   ├── ARCHITECTURE.md   # PKI design decisions
-│   ├── CLIENT_TRUST.md   # Cross-platform Root CA installation
-│   ├── NGINX_TLS.md      # nginx TLS termination
-│   ├── COEXISTENCE.md    # Integration with acme-dns, Tailscale, AD-DNS (v1.2.0+)
-│   ├── BACKUP.md         # 3-2-1 backup strategy
-│   └── TROUBLESHOOTING.md# Common issues + DNS coexistence pitfalls
-├── examples/             # Service integration examples
-│   ├── README.md         # Examples overview
-│   ├── cert-request-template.sh
-│   ├── vaultwarden/      # Password manager
-│   ├── nextcloud/        # Cloud storage
-│   ├── portainer/        # Docker management
-│   └── generic/          # nginx reverse proxy
-├── monitoring/           # Prometheus metrics exporters
-│   ├── README.md         # Monitoring guide
-│   ├── cert-exporter.sh  # Certificate expiry metrics
-│   ├── check-time-sync.sh # NTP time synchronization validation
-│   ├── prometheus-rules.yml    # Alert rules (expiry, staleness, container)
-│   └── grafana-dashboard.json  # Certificate monitoring dashboard
-├── renewal/              # Auto-renewal scripts
-│   ├── README.md         # Renewal workflow
-│   └── renew-service-cert.sh   # --force flag + pubkey match check (v1.3.0+)
-├── revocation/           # Certificate revocation (⚠️ EXPERIMENTAL)
-│   ├── README.md         # Revocation guide
-│   └── revoke-cert.sh
-├── systemd/              # systemd templates
-│   ├── README.md         # Timer setup + ReadWritePaths hardening
-│   ├── step-ca-renew.service.template
-│   ├── step-ca-renew.timer.template
-│   ├── step-ca-renew-failure-notify.service.template  # OnFailure hook (v1.3.0+)
-│   ├── check-time-sync.service
-│   └── check-time-sync.timer
-├── CONTRIBUTING.md       # Contribution guidelines
-├── CODE_OF_CONDUCT.md    # Community standards
-├── SECURITY.md           # Security policy
-├── CHANGELOG.md          # Version history
-└── LICENSE               # MIT License
+|-- config/               # Docker Compose stack configuration
+|   |-- README.md         # Configuration guide
+|   `-- step-ca-stack.yml # step-ca container deployment (image pinned to 0.29.0)
+|-- scripts/              # PKI lifecycle scripts
+|   |-- README.md         # Scripts overview + workflow diagram
+|   |-- create-root-ca.sh            # Offline Root CA (air-gap verified)
+|   |-- generate-intermediate-csr.sh # Server-side Intermediate key + CSR
+|   `-- sign-intermediate-ca.sh      # Offline Intermediate signing
+|-- docs/                 # Documentation (7 guides)
+|   |-- README.md         # Navigation hub
+|   |-- SETUP.md          # Installation guide
+|   |-- ARCHITECTURE.md   # PKI design decisions
+|   |-- CLIENT_TRUST.md   # Cross-platform Root CA installation
+|   |-- NGINX_TLS.md      # nginx TLS termination
+|   |-- COEXISTENCE.md    # Integration with acme-dns, Tailscale, AD-DNS
+|   |-- BACKUP.md         # 3-2-1 backup strategy
+|   `-- TROUBLESHOOTING.md# Common issues + DNS coexistence pitfalls
+|-- examples/             # Service integration examples
+|   |-- README.md         # Examples overview
+|   |-- cert-request-template.sh
+|   |-- vaultwarden/      # Password manager
+|   |-- nextcloud/        # Cloud storage
+|   |-- portainer/        # Docker management
+|   `-- generic/          # nginx reverse proxy
+|-- monitoring/           # Prometheus metrics exporters
+|   |-- README.md         # Monitoring guide
+|   |-- cert-exporter.sh  # Certificate expiry metrics
+|   |-- check-time-sync.sh # NTP time synchronization validation
+|   |-- prometheus-rules.yml    # Alert rules (expiry, staleness, container)
+|   `-- grafana-dashboard.json  # Certificate monitoring dashboard
+|-- renewal/              # Auto-renewal
+|   |-- README.md         # Renewal workflow
+|   `-- renew-service-cert.sh   # threshold + --force, flock, pubkey match check
+|-- revocation/           # Certificate revocation (EXPERIMENTAL)
+|   |-- README.md         # Revocation guide
+|   `-- revoke-cert.sh
+|-- systemd/              # systemd units and templates
+|   |-- README.md         # Timer setup + ReadWritePaths hardening
+|   |-- step-ca-renew.service.template
+|   |-- step-ca-renew.timer.template
+|   |-- step-ca-renew-failure-notify.service.template  # OnFailure hook
+|   |-- check-time-sync.service
+|   `-- check-time-sync.timer
+|-- CONTRIBUTING.md       # Contribution guidelines
+|-- CODE_OF_CONDUCT.md    # Community standards
+|-- SECURITY.md           # Security policy
+|-- CHANGELOG.md          # Version history
+`-- LICENSE               # MIT License
 ```
 
 ## Component Overview
 
-| Component | Purpose | Technology | Complexity |
-|-----------|---------|------------|-----------|
-| `renewal/` | Auto-renewal of service certificates (30-day threshold) | Bash + systemd timers | Low (~100 LOC) |
-| `monitoring/` | Certificate expiry metrics for Prometheus | Bash + node_exporter textfile | Low (~150 LOC) |
-| `revocation/` | Certificate revocation (CRL distribution) | OpenSSL + Bash | Medium (~200 LOC, ⚠️ EXPERIMENTAL) |
-| `examples/` | Service integration templates (Vaultwarden, Nextcloud, Portainer, generic nginx) | docker-compose + nginx | Varies (379-453 LOC per service) |
-| `docs/` | Architecture guides, setup instructions, troubleshooting | Markdown (6 docs) | N/A |
-| `systemd/` | Service/timer templates for auto-renewal | systemd unit files | Template-based |
-| `config/` | step-ca Docker Compose stack configuration | YAML | Low (~50 LOC) |
+| Component | Purpose | Technology |
+|-----------|---------|------------|
+| `scripts/` | Root CA creation, Intermediate CSR and offline signing | Bash + step CLI + OpenSSL |
+| `renewal/` | Auto-renewal of service certificates below the 30-day threshold | Bash + systemd timers |
+| `monitoring/` | Certificate expiry metrics and NTP validation | Bash + node_exporter textfile collector |
+| `revocation/` | CRL generation and distribution (EXPERIMENTAL, see Known Limitations) | OpenSSL + Bash |
+| `examples/` | Request template plus four service integrations | Bash + docker-compose + nginx |
+| `systemd/` | Service and timer templates for renewal and time sync | systemd unit files |
+| `config/` | step-ca Docker Compose stack | YAML |
+| `docs/` | Architecture, setup, client trust, coexistence, backup, troubleshooting | Markdown |
 
 ## Service Integration Examples
 
-**Available Examples:**
-- **Vaultwarden** - Password manager with TLS (`examples/vaultwarden/`)
-- **Nextcloud** - Cloud storage with TLS (`examples/nextcloud/`)
-- **Portainer** - Docker management with TLS (`examples/portainer/`)
+- **Vaultwarden** - password manager (`examples/vaultwarden/`)
+- **Nextcloud** - cloud storage (`examples/nextcloud/`)
+- **Portainer** - Docker management (`examples/portainer/`)
 - **Generic** - nginx reverse proxy template (`examples/generic/`)
 
-Each example includes:
-- `docker-compose.yml` - Service container configuration
-- `nginx.conf` - TLS termination configuration
-- `README.md` - Setup instructions
+Each one ships a `docker-compose.yml`, an `nginx.conf` for TLS termination, and a
+`README.md` with the setup steps.
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
-| [SETUP.md](docs/SETUP.md) | Complete installation guide |
+| [SETUP.md](docs/SETUP.md) | Complete installation guide, six phases |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | PKI design decisions |
 | [CLIENT_TRUST.md](docs/CLIENT_TRUST.md) | Cross-platform Root CA installation |
 | [COEXISTENCE.md](docs/COEXISTENCE.md) | Integration with acme-dns / Tailscale / AD-DNS |
@@ -302,33 +309,30 @@ Each example includes:
 | [NGINX_TLS.md](docs/NGINX_TLS.md) | nginx TLS termination |
 | [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common issues |
 
-📚 **Recommended reading order**: SETUP → ARCHITECTURE → CLIENT_TRUST → COEXISTENCE → NGINX_TLS → BACKUP → TROUBLESHOOTING
+[docs/README.md](docs/README.md) has the reading order and says which guide is for whom.
 
 ## vs. Alternatives
 
-| Solution | Pros | Cons |
-|----------|------|------|
-| **Let's Encrypt** | Free, automatic | Public domains only |
-| **OpenSSL (manual)** | Full control | Complex, no automation |
-| **step-ca Official Docs** | Good basics | No production patterns |
-| **Enterprise PKI** | Support, GUI | Expensive ($5,000+), overkill |
-| **This Repo** | Production-ready, multi-service, monitoring | step-ca only, no GUI |
+| Solution | Strengths | Weaknesses |
+|----------|-----------|------------|
+| **Let's Encrypt** | Free, automated, trusted everywhere | Public domains only |
+| **OpenSSL by hand** | Full control | No automation, no renewal, no inventory |
+| **step-ca official docs** | Authoritative on the CA itself | Leaves multi-service operation to you |
+| **HashiCorp Vault** | Full lifecycle, revocation, HSM | Another stateful service to run and back up |
+| **Commercial PKI** | Support, GUI, audit trail | Cost, and overkill below a few hundred devices |
+| **This repo** | Renewal timers, monitoring, client trust, four worked integrations | step-ca only, no GUI, revocation not functional |
 
-**Unique Value:**
-- **Production Patterns** - Auto-renewal, monitoring, service integration
-- **Multi-Service** - Tested with 6+ services (Vaultwarden, Nextcloud, etc.)
-- **Monitoring** - Prometheus alerts, Grafana dashboards
-- **Client Trust** - Cross-platform automation
-- **Coexistence** - Documented patterns for living next to acme-dns / Tailscale / AD-DNS
-- **Air-Gap Safety** - Scripts verify offline state before touching the Root key
-- **CRL Architecture** - Certificate revocation support
+What it adds over the upstream documentation is the operational half: renewal on a
+timer with a failure hook, Prometheus metrics and alert rules, Root CA distribution
+across three client platforms, and documented coexistence with acme-dns, Tailscale
+MagicDNS and AD DNS.
 
 ## Requirements
 
 - **OS**: Linux (tested on Ubuntu 22.04+, Debian 11+)
 - **Docker**: 20.10+
-- **OpenSSL**: 1.1.1+ (for certificate operations)
-- **Bash**: 4.0+ (for scripts)
+- **OpenSSL**: 1.1.1+
+- **Bash**: 4.0+
 
 ## Compatibility
 
@@ -339,53 +343,49 @@ Each example includes:
 
 **Should work** (untested):
 - Other systemd-based distros with Docker support
-- macOS (for client trust scripts only)
+- macOS (client trust and offline signing scripts only)
 - WSL2 (Windows Subsystem for Linux)
+
+**Not supported**:
+- Non-systemd init systems (the renewal timers have no fallback)
+- HSM-backed CA keys (step-ca Enterprise Edition)
 
 ## Security
 
-- **Offline Root CA** - Air-gapped, GPG-encrypted, multiple backups
-- **Short-Lived Certificates** - 90 days validity (step-ca default)
-- **Auto-Renewal** - 30-day threshold prevents expiry
-- **CRL Distribution** - HTTP endpoint for revocation checking
-- **Monitoring** - Prometheus alerts 30/7/1 days before expiry
+- **Offline Root CA** - air-gapped creation, GPG-encrypted at rest, plaintext key wiped
+- **90-day certificates** - short lifetimes are the mitigation for missing revocation, not a bonus
+- **Renewal at 30 days left** - with an `OnFailure=` hook, so failures are noticed
+- **Hardened units** - `ProtectSystem=strict`, `NoNewPrivileges`, `ReadWritePaths` scoped to the cert directory
+- **Container hardening** - `read_only: true`, non-root user 1000:1000, read-only config and secret mounts
+- **Monitoring** - Prometheus alerts at 30, 7 and 1 day for service certs, 90 days for the Intermediate, 365 for the Root
 
-## Real-World Results
+Where these guarantees end is documented: [Known Limitations](#known-limitations)
+for revocation, [SECURITY.md](SECURITY.md) for the reporting process.
 
-**Proven in Production**:
-- 🚀 **Pi 5 Router** (ARM64, 6 services): 100% certificate uptime, auto-renewal since Dec 2025
-- 🚀 **NAS Server** (x86_64, AMD Ryzen 9, 38 Docker containers): Zero browser warnings across all services
-- 🚀 **6+ integrated services**: Vaultwarden, Nextcloud, Portainer, Dashboard, Grafana, Prometheus
+## In Production
 
-**Key Metrics**:
-- Certificate expiry incidents: **0** (auto-renewal working)
-- Manual certificate renewal required: **0** (systemd timers handle everything)
-- Browser trust warnings: **0** (Root CA installed on all clients)
-- Platforms tested: ARM64 (Raspberry Pi 5) + x86_64 (AMD Ryzen 9)
-- Certificate validity: 90 days (step-ca default)
-- Renewal threshold: 30 days before expiry
+Running since December 2025 on two hosts: a Raspberry Pi 5 router (ARM64) and an
+x86_64 NAS, together serving six internal services (Vaultwarden, Nextcloud,
+Portainer, a dashboard, Grafana, Prometheus). Across that time no certificate has
+expired and no renewal has needed a manual step, which is a statement about two
+machines with daily timers, not a benchmark.
 
-**Monitoring Coverage**:
-- Prometheus metrics: Certificate expiry in days
-- Grafana alerts: 30/7/1 day warnings
-- Telegram notifications: Critical expiry warnings
+The number worth knowing is 90 and 30: certificates live 90 days, renewal starts at
+30 days left. That leaves a 60-day window in which a broken renewal can be noticed
+and fixed before anything expires, and the `OnFailure=` hook exists so the window is
+actually used.
 
 ## Contributing
 
-Contributions welcome! Please:
-1. Test changes in a local environment
-2. Follow existing script patterns (SPDX headers, inline logging)
-3. Update documentation
-4. Submit pull request with clear description
+Test changes locally, keep the existing script conventions (SPDX headers, inline
+logging, `set -euo pipefail`), update the affected documentation in the same commit,
+and describe what you changed in the pull request. Details in
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
-**Areas where help is appreciated**:
-- Additional service integration examples (GitLab, Grafana, Authentik, Keycloak)
-- Testing on additional platforms (Alpine Linux, Arch, OpenSUSE, RHEL)
-- ACME protocol support (automated certificate requests without manual CSR)
-- Web UI for certificate management (dashboard for CA administration)
-- Health check examples for container-specific validation
-- Grafana dashboard examples for certificate expiry visualization
-- mTLS examples for service-to-service authentication
+Help is especially welcome on: additional service integrations (GitLab, Grafana,
+Authentik, Keycloak), testing on Alpine, Arch, openSUSE and RHEL, ACME support so
+certificate requests skip the manual CSR, and mTLS examples for service-to-service
+authentication.
 
 ## License
 
@@ -395,24 +395,27 @@ MIT License - see [LICENSE](LICENSE)
 
 Marc Allgeier ([@fidpa](https://github.com/fidpa))
 
-**Why I Built This**: After clicking through browser warnings for months (`https://192.168.1.50:8443` is not a great experience), I finally set up a proper internal PKI. The official step-ca documentation covers basics well, but lacks production patterns: multi-service integration, monitoring, auto-renewal automation, and client trust distribution. This repo consolidates everything I learned into a reusable setup.
+I built this after months of clicking through browser warnings on my own services.
+The official step-ca documentation explains the CA well; what it left to me was
+everything around it, and that is what this repository is.
 
 ## See Also
 
-- [ubuntu-server-security](https://github.com/fidpa/ubuntu-server-security) - Security hardening (12 components, CIS Benchmark)
-- [bash-production-toolkit](https://github.com/fidpa/bash-production-toolkit) - Production-ready Bash libraries
-- [monitoring-templates](https://github.com/fidpa/monitoring-templates) - Bash/Python monitoring templates
+- [ubuntu-server-security](https://github.com/fidpa/ubuntu-server-security) - 14 security hardening components along the CIS Benchmark
+- [bash-production-toolkit](https://github.com/fidpa/bash-production-toolkit) - Bash libraries for logging, security and monitoring
+- [linux-monitoring-templates](https://github.com/fidpa/linux-monitoring-templates) - Bash/Python monitoring script templates
 
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/fidpa/step-ca-internal-pki/issues)
-- **Documentation**: See [docs/](docs/) directory
+- **Documentation**: [docs/](docs/)
 - **step-ca Docs**: https://smallstep.com/docs/step-ca
 
 ## Credits
 
-Built with [Smallstep step-ca](https://github.com/smallstep/certificates) - A lightweight, open-source Certificate Authority.
+Built on [Smallstep step-ca](https://github.com/smallstep/certificates), a
+lightweight open-source Certificate Authority.
 
 ---
 
-**Production-tested since December 2025** | v1.3.7 (August 2026) | 8 scripts | 7 core docs + 12 READMEs
+**Production-tested since December 2025** | v1.3.9 (August 2026) | 8 scripts | 7 core docs + 12 READMEs

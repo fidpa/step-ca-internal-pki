@@ -4,7 +4,7 @@ Common issues and solutions for step-ca Production Setup.
 
 ## ⚡ TL;DR
 
-Symptom → Ursache → Lösung Format. Häufigste Probleme: Certificate Verification (Trust Chain), Container-Start (Permissions), Auto-Renewal (Timer), Browser-Warnings (Client Trust).
+Every entry is symptom, cause, fix. The four that come up most: certificate verification (trust chain), container start (permissions), auto-renewal (timer), browser warnings (client trust).
 
 ---
 
@@ -88,8 +88,8 @@ openssl x509 -in /etc/ssl/step-ca/service.crt -noout -enddate
 sudo /usr/local/bin/renew-service-cert.sh
 
 # Verify auto-renewal timer
-systemctl status service-renew.timer
-journalctl -u service-renew.service -n 50
+systemctl status step-ca-renew-myservice.timer
+journalctl -u step-ca-renew-myservice.service -n 50
 ```
 
 **Auto-Renewal Setup**: See [SETUP.md § Phase 5: Set Up Auto-Renewal](SETUP.md#phase-5-set-up-auto-renewal)
@@ -115,8 +115,9 @@ DNS.2 = service2.internal
 IP.1 = 10.0.0.2
 EOF
 
-# Request new certificate
-sudo /tmp/service-cert-request.sh
+# Re-issue with the new SANs. --force skips the days-left threshold, which a
+# fresh certificate would otherwise fail.
+sudo SERVICE_NAME=service /usr/local/bin/renew-service-cert.sh --force
 ```
 
 ---
@@ -144,7 +145,7 @@ docker logs step-ca
 
 **Solutions:**
 ```bash
-# Port conflicts - change ports in docker-compose.yml
+# Port conflicts - change the published ports in /opt/step-ca/step-ca-stack.yml
 # Default: 9200 (HTTP-01), 9643 (HTTPS)
 # Change to: 9080, 9443 if conflicts exist
 
@@ -340,14 +341,14 @@ systemctl list-timers | grep renew
 **Solution:**
 ```bash
 # Enable timer
-systemctl enable --now service-renew.timer
+systemctl enable --now step-ca-renew-myservice.timer
 
 # Check timer status
-systemctl status service-renew.timer
+systemctl status step-ca-renew-myservice.timer
 
 # Force manual run
-systemctl start service-renew.service
-journalctl -u service-renew.service -f
+systemctl start step-ca-renew-myservice.service
+journalctl -u step-ca-renew-myservice.service -f
 ```
 
 ---
@@ -359,7 +360,7 @@ journalctl -u service-renew.service -f
 **Diagnosis:**
 ```bash
 # Check recent runs
-journalctl -u service-renew.service --since "7 days ago"
+journalctl -u step-ca-renew-myservice.service --since "7 days ago"
 
 # Check certificate days remaining
 openssl x509 -in /etc/ssl/step-ca/service.crt -noout -enddate
@@ -373,7 +374,7 @@ openssl x509 -in /etc/ssl/step-ca/service.crt -noout -enddate
 **Solution:**
 ```bash
 # Verify environment in service file
-systemctl cat service-renew.service | grep Environment
+systemctl cat step-ca-renew-myservice.service | grep Environment
 
 # Test renewal manually
 sudo RENEWAL_THRESHOLD=90 /usr/local/bin/renew-service-cert.sh
@@ -425,7 +426,7 @@ ssl_certificate_key /etc/ssl/step-ca/service.key;
 **Solution:**
 ```bash
 # Check SERVICE_RELOAD_CMD in systemd service
-systemctl cat service-renew.service | grep SERVICE_RELOAD_CMD
+systemctl cat step-ca-renew-myservice.service | grep SERVICE_RELOAD_CMD
 
 # Should be:
 Environment="SERVICE_RELOAD_CMD=systemctl reload nginx"
@@ -527,7 +528,7 @@ ls -ln /opt/step-ca/
 **Recovery Time**: 15-30 minutes
 
 **Steps:**
-1. Restore from backup: `/opt/step-ca/backups/`
+1. Restore from backup: `/opt/backups/step-ca/` (the location the backup script in BACKUP.md writes to)
 2. Verify integrity: `openssl verify -CAfile root_ca.crt intermediate_ca.crt`
 3. Restart step-ca: `docker restart step-ca`
 
@@ -544,8 +545,12 @@ ls -ln /opt/step-ca/
 2. Generate new Intermediate CA
 3. Sign with Root CA
 4. Deploy new Intermediate
-5. Re-issue all service certificates
-6. Distribute CRL
+5. Re-issue all service certificates with **new keys**
+6. Replace the old Intermediate in every fullchain file and reload the services
+
+There is no CRL step: certificates signed the OpenSSL way are not in step-ca's
+database and cannot be revoked. The old Intermediate stays valid until it
+expires.
 
 **Full Recovery Guide**: See [ARCHITECTURE.md § Disaster Recovery - Intermediate CA Compromise](ARCHITECTURE.md#intermediate-ca-compromise)
 
@@ -553,7 +558,7 @@ ls -ln /opt/step-ca/
 
 ## Getting Help
 
-1. **Check Logs**: `journalctl -u step-ca.service -f`
+1. **Check Logs**: `docker logs -f step-ca` (step-ca runs as a container, not as a systemd unit)
 2. **Search Issues**: [GitHub Issues](https://github.com/fidpa/step-ca-internal-pki/issues)
 3. **step-ca Docs**: https://smallstep.com/docs/step-ca
 4. **Community**: https://github.com/smallstep/certificates/discussions
@@ -572,8 +577,8 @@ docker logs step-ca
 docker exec -it step-ca step ca health
 
 # systemd debugging
-systemctl status service-renew.timer
-journalctl -u service-renew.service -n 100
+systemctl status step-ca-renew-myservice.timer
+journalctl -u step-ca-renew-myservice.service -n 100
 
 # Metric verification
 curl http://localhost:9100/metrics | grep step_ca

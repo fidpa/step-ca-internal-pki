@@ -127,6 +127,12 @@ This guide walks through the commands manually for transparency. If you'd rather
 - `scripts/generate-intermediate-csr.sh` — replaces Phase 2 Steps 1–2
 - `scripts/sign-intermediate-ca.sh` — replaces Phase 2 Step 3
 
+The two paths name their files differently: the scripts produce `root_ca.key.gpg`
+in `~/.ca-creation-<timestamp>/` and use `step certificate create`, the manual
+commands below produce `root_ca_key.pem.gpg` in a directory you pick and use
+OpenSSL. Pick one path and stay on it; the certificates are equivalent, the
+filenames are not.
+
 ---
 
 ## Phase 1: Create Root CA (Offline)
@@ -194,11 +200,15 @@ shred -vfz -n 10 root_ca_key.pem
 
 ### Step 4: Backup Root CA
 
-Create **4 backups** (3-2-1 strategy):
-1. Primary server (`/opt/step-ca/backups/`)
-2. Secondary server (NAS, external drive)
-3. Offline USB drive (locked safe)
-4. Cloud backup (encrypted)
+Create at least three copies on two media types with one of them offsite
+(3-2-1 rule). A layout that satisfies it:
+1. Offline USB drive in a safe (the working copy)
+2. Second USB drive or NAS volume (different medium)
+3. Encrypted cloud backup (offsite)
+
+A fourth copy on the production server is convenient but does not count towards
+the rule, and it puts the encrypted Root key on the machine the Root key is
+supposed to stay away from.
 
 **Store GPG passphrase** in password manager (1Password, Bitwarden).
 
@@ -292,7 +302,8 @@ openssl x509 -req \
 # Verify chain
 openssl verify -CAfile root_ca.crt intermediate_ca.crt
 
-# Re-encrypt Root CA key
+# Wipe the decrypted copy. The GPG file from Phase 1 Step 3 stays as it is;
+# nothing needs re-encrypting.
 shred -vfz -n 10 root_ca_key.pem
 ```
 
@@ -387,9 +398,9 @@ cp config/step-ca-stack.yml /opt/step-ca/
 
 # Edit ports if needed (default: 9200 for HTTP-01, 9643 for HTTPS)
 
-# Start container
+# Start container (the file is not named docker-compose.yml, so -f is required)
 cd /opt/step-ca
-docker compose up -d
+docker compose -f step-ca-stack.yml up -d
 
 # Verify health
 docker logs step-ca
@@ -500,7 +511,8 @@ systemctl list-timers | grep step-ca-renew
 systemctl list-timers step-ca-renew-myservice.timer
 # Should show "NEXT" time (when it will run next)
 
-# Manual trigger (WARNING: This will renew immediately if threshold is met!)
+# Manual trigger. Renews only if fewer than RENEWAL_THRESHOLD days remain;
+# a fresh certificate produces "No renewal needed". Use --force to re-issue anyway.
 sudo systemctl start step-ca-renew-myservice.service
 journalctl -u step-ca-renew-myservice.service -n 50
 # Check logs for success

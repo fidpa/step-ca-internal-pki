@@ -36,7 +36,7 @@ Install the Root CA certificate on every client so the trust chain validates. Li
 | **RHEL/CentOS** | `sudo cp root_ca.crt /etc/pki/ca-trust/source/anchors/ && sudo update-ca-trust` | `openssl verify service.crt` |
 | **macOS** | `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain root_ca.crt` | `security verify-cert -c service.crt` |
 | **Windows** | `certutil -addstore -f "ROOT" root_ca.crt` | PowerShell: `Get-ChildItem Cert:\LocalMachine\Root \| Where {$_.Subject -like "*Root CA*"}` |
-| **Firefox** | GUI: Settings → Certificates → Import | CLI: `certutil -A -n "step-ca Root CA" -t "C,," -d sql:$PROFILE -i root_ca.crt` |
+| **Firefox** | GUI: Settings → Certificates → Import | CLI: `certutil -A -n "step-ca Root CA" -t "C,," -d sql:$FIREFOX_PROFILE -i root_ca.crt` |
 
 ---
 
@@ -222,8 +222,10 @@ sudo apt install libnss3-tools  # Debian/Ubuntu
 # OR
 brew install nss  # macOS
 
-# Find Firefox profile directory
-FIREFOX_PROFILE=$(find ~/.mozilla/firefox -name "*.default-release" | head -1)
+# Find Firefox profile directory. On Ubuntu 22.04+ Firefox is a snap and keeps
+# its profile elsewhere, so search both locations.
+FIREFOX_PROFILE=$(find ~/.mozilla/firefox ~/snap/firefox/common/.mozilla/firefox \
+    -maxdepth 1 -name "*.default-release" 2>/dev/null | head -1)
 
 # Import Root CA
 certutil -A -n "step-ca Root CA" -t "C,," \
@@ -236,12 +238,13 @@ certutil -L -d sql:"$FIREFOX_PROFILE"
 **Windows**:
 
 ```powershell
-# Find Firefox profile directory
-$PROFILE = Get-ChildItem "$env:APPDATA\Mozilla\Firefox\Profiles" | Where-Object {$_.Name -like "*.default-release"} | Select-Object -First 1
+# Find Firefox profile directory. Don't call the variable $PROFILE - that is a
+# PowerShell automatic variable holding the path to your profile script.
+$FfProfile = Get-ChildItem "$env:APPDATA\Mozilla\Firefox\Profiles" | Where-Object {$_.Name -like "*.default-release"} | Select-Object -First 1
 
 # Import Root CA (requires certutil from NSS, included with Firefox)
 & "C:\Program Files\Mozilla Firefox\certutil.exe" -A -n "step-ca Root CA" -t "C,," `
-    -d sql:$PROFILE.FullName -i C:\temp\root_ca.crt
+    -d sql:$FfProfile.FullName -i C:\temp\root_ca.crt
 ```
 
 ---
@@ -334,8 +337,9 @@ exec "$@"
 # Specify CA bundle
 curl --cacert /path/to/root_ca.crt https://service.internal
 
-# Add to curl's default CA bundle
-cat /tmp/root_ca.crt >> /etc/ssl/certs/ca-certificates.crt
+# Do NOT append to /etc/ssl/certs/ca-certificates.crt - that file is generated,
+# and the next update-ca-certificates run drops your line. Install the Root CA
+# properly instead (see the Linux section above).
 ```
 
 ### Python (requests library)
@@ -394,8 +398,8 @@ keytool -list -keystore $JAVA_HOME/lib/security/cacerts | grep step-ca
 # Add Root CA to Git's CA bundle
 git config --global http.sslCAInfo /path/to/root_ca.crt
 
-# OR append to system bundle
-cat /tmp/root_ca.crt >> /etc/ssl/certs/ca-certificates.crt
+# OR, system-wide: install the Root CA via update-ca-certificates (Linux section
+# above). Do not append to /etc/ssl/certs/ca-certificates.crt; it is regenerated.
 ```
 
 ---
@@ -566,7 +570,9 @@ If Root CA is compromised:
 2. Generate new Root CA (entirely new key pair)
 3. Redistribute new Root CA
 
-**Timeline**: 1-2 weeks for full fleet update.
+**Timeline**: as long as it takes to reach every trust store by hand. There is no
+push mechanism here, and no revocation to fall back on, which is the real reason
+the Root key stays offline.
 
 ---
 

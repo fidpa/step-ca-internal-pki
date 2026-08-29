@@ -4,7 +4,7 @@ How step-ca and its supporting infrastructure (typically a private DNS resolver,
 
 ## ⚡ TL;DR
 
-step-ca itself is unobtrusive (ports 9200 + 9443, no privileged binds), but most internal-PKI deployments also stand up a private DNS resolver on port 53 — and port 53 is heavily contested. This document collects the patterns that work in practice when port 53, the DNS resolver, a VPN's magic DNS, and an Active Directory live on the same network.
+step-ca itself is unobtrusive (host ports 9200 and 9643, no privileged binds), but most internal-PKI deployments also stand up a private DNS resolver on port 53 — and port 53 is heavily contested. This document collects the patterns that work in practice when port 53, the DNS resolver, a VPN's magic DNS, and an Active Directory live on the same network.
 
 ---
 

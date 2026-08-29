@@ -1,10 +1,10 @@
 # Backup and Disaster Recovery
 
-Comprehensive backup strategy for step-ca PKI infrastructure following the **3-2-1 rule**.
+How the PKI gets backed up along the **3-2-1 rule**, and how it comes back.
 
 ## ⚡ TL;DR
 
-3-2-1 backup rule: Root CA GPG-encrypted offline, Intermediate daily + offsite, step-ca DB every 6 hours. Recovery procedures for three disaster scenarios documented below.
+3-2-1 backup rule: Root CA GPG-encrypted and offline, Intermediate CA and step-ca database daily plus an offsite copy. Recovery procedures for three disaster scenarios below.
 
 ---
 
@@ -144,13 +144,19 @@ sudo mkfs.exfat -L "PKI-BACKUP" /dev/sdX1   # ⚠ Label max 11 chars (exFAT limi
 
 **Copy 2: Paper Backup (for key recovery)**
 ```bash
-# Generate QR code of GPG-encrypted key (split into chunks)
-qrencode -o root_ca_qr.png < root_ca_key.pem.gpg
+# Base64 first: qrencode takes text, and a raw GPG blob is binary.
+base64 < root_ca_key.pem.gpg > paper-backup.txt
 
-# Alternative: Print hexdump (tedious but works)
-xxd root_ca_key.pem.gpg > root_ca_hex.txt
-# Store in bank safe deposit box
+# One QR code holds ~2.9 KB, so split. A GPG-wrapped EC key needs one or two parts.
+split -b 1000 paper-backup.txt qr-part-
+for f in qr-part-*; do qrencode -o "$f.png" -r "$f"; done
+
+# Alternative: print the base64 text itself (no scanner needed to restore)
+# Restore: cat the parts back together, then `base64 -d > root_ca_key.pem.gpg`
 ```
+
+Verify the restore path on a scratch copy **before** the paper goes into the safe.
+A paper backup nobody has ever read back is a photograph of a backup.
 
 **Copy 3: Offsite (Encrypted Cloud) - RECOMMENDED**
 
@@ -295,8 +301,9 @@ Create `/etc/systemd/system/step-ca-offsite-sync.timer`:
 Description=step-ca Offsite Sync Timer
 
 [Timer]
-OnCalendar=daily
-OnCalendar=04:00
+# One line only: multiple OnCalendar= entries add up, so "daily" plus "04:00"
+# would run at midnight AND at 04:00.
+OnCalendar=*-*-* 04:00:00
 Persistent=true
 
 [Install]
@@ -357,8 +364,9 @@ restic -r /path/to/backup/repo restore latest --target /opt/step-ca-restore
    # Check health
    curl -k https://localhost:9643/health
 
-   # Test certificate issuance (dry-run)
-   docker exec step-ca step ca certificate test.internal test.crt test.key --dry-run
+   # Test certificate issuance. There is no --dry-run flag; issue into /tmp
+   # and delete afterwards.
+   docker exec step-ca step ca certificate test.internal /tmp/test.crt /tmp/test.key
    ```
 
 3. **Monitor services**:
@@ -388,8 +396,9 @@ restic -r /path/to/backup/repo restore latest --target /opt/step-ca-restore
 
 2. **Verify key integrity**:
    ```bash
-   # Check key matches public certificate
-   openssl rsa -in root_ca_key.pem -pubout | sha256sum
+   # Check key matches public certificate. Use pkey, not rsa: both CA keys
+   # are ECDSA (P-384 Root, P-256 Intermediate) and `openssl rsa` rejects them.
+   openssl pkey -in root_ca_key.pem -pubout | sha256sum
    openssl x509 -in root_ca.crt -pubkey -noout | sha256sum
    # Checksums must match
    ```
@@ -427,21 +436,17 @@ restic -r /path/to/backup/repo restore latest --target /opt/step-ca-restore
    docker start step-ca
    ```
 
-2. **Rebuild CRL**:
+2. **Fetch the CRL** (only meaningful if certificates were issued through the CA
+   API; the OpenSSL workflow of this repository puts nothing in the database):
    ```bash
-   # Regenerate CRL from database
-   docker exec step-ca step ca crl > /opt/step-ca/crl/current.crl
+   # There is no `step ca crl` subcommand. step-ca serves the CRL over HTTP,
+   # on the API port 9643, not on 9200 (HTTP-01 challenges only).
+   curl -k https://localhost:9643/1.0/crl | openssl crl -inform DER -text -noout
    ```
 
-3. **Verify**:
+3. **Verify the CA answers again**:
    ```bash
-   # Note: CRL endpoint not applicable for Offline CA design
-   # (certificates signed via OpenSSL are not in step-ca database)
-   # For manual CRL generation, see docs/ARCHITECTURE.md § Revocation Process
-   #
-   # If using step-ca API-based CA (certificates in database):
-   # Use Admin API port 9643 for CRL, NOT port 9200 (HTTP-01 challenges only)
-   # curl -k https://localhost:9643/1.0/crl | openssl crl -inform DER -text -noout
+   curl -k https://localhost:9643/health   # {"status":"ok"}
    ```
 
 ---
@@ -457,9 +462,11 @@ restic -r /path/to/backup/repo restore latest --target /opt/step-ca-restore
 1. **Create test environment**:
    ```bash
    # Spin up test step-ca container
+   # Same tag as production (config/step-ca-stack.yml), not :latest -
+   # a restore test against a different version tests the wrong thing.
    docker run -d --name step-ca-test \
        -v /tmp/step-ca-test:/home/step \
-       smallstep/step-ca:latest
+       smallstep/step-ca:0.29.0
    ```
 
 2. **Restore backup to test environment**:
@@ -535,18 +542,21 @@ restic -r /path/to/backup/repo restore latest --target /opt/step-ca-restore
 
 ## Compliance Checklists
 
-### PCI DSS Requirements
+These are the backup practices an auditor would ask about, mapped to the control
+they usually come up under. The requirements about cardholder data itself
+(PCI DSS 3.x) are about PANs, not CA keys, and do not apply to this repository.
 
-- ✅ 3.1: Minimize cardholder data retention → Root CA key offline, never on network
-- ✅ 3.4: Render PAN unreadable → GPG encryption for Root CA key
-- ✅ 3.5.2: Encrypted transmission → TLS for backup transfers (rsync over SSH)
-- ✅ 9.1: Physical access controls → Root CA USB in locked safe
+### PCI DSS
 
-### SOC 2 Controls
+- 3.6 / 3.7 (key management): Root key generated offline, GPG-encrypted at rest, passphrase held by two people, documented rotation
+- 4.2.1 (transmission): backups travel over rsync-in-SSH, never in the clear
+- 9.4 (media): the Root CA USB stick lives in a locked safe, the offsite copy is encrypted before upload
 
-- ✅ CC6.1: Logical access → Backups readable only by root
-- ✅ CC6.7: Encryption keys → GPG passphrases in password manager
-- ✅ A1.2: Backup and recovery → 3-2-1 rule, monthly restore tests
+### SOC 2
+
+- CC6.1 (logical access): backup files `chmod 600`, directory `chmod 700`, root only
+- CC6.7 (key handling): GPG passphrases in a password manager, separate passphrase for the offsite copy
+- A1.2 (backup and recovery): 3-2-1 layout, monthly restore test, annual recovery drill
 
 </details>
 
@@ -556,7 +566,9 @@ restic -r /path/to/backup/repo restore latest --target /opt/step-ca-restore
 
 ### Backup Success Metrics
 
-**Prometheus Alerts** (optional):
+**Prometheus Alerts** (optional). Neither metric below is produced by
+`monitoring/cert-exporter.sh`; a backup job that writes them to the textfile
+collector is yours to add:
 
 ```yaml
 - alert: StepCABackupFailed

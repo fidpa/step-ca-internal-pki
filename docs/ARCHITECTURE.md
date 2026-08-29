@@ -24,7 +24,7 @@ The default workflow uses **direct OpenSSL signing** (`openssl x509 -req`), whic
 - ❌ **NOT tracked** in step-ca BadgerDB
 - ❌ **CANNOT be revoked** via `step ca revoke`
 - ❌ **NO CRL generation** possible (would require `openssl ca -gencrl`)
-- ❌ **NO OCSP responder** support
+- ❌ **NO OCSP responder** - step-ca has none at all; Smallstep ships CRL support and points to their commercial product for OCSP
 
 ### Current Mitigation
 
@@ -72,14 +72,14 @@ This PKI uses a **two-tier certificate authority (CA)** architecture with an off
 ```
 ┌─────────────────────────────────┐
 │      Root CA (Offline)          │
-│   Validity: 10-20 years         │
+│   Validity: 10 years (default)  │
 │   Private Key: Air-gapped       │
 └────────────┬────────────────────┘
              │ Signs
              ▼
 ┌─────────────────────────────────┐
 │   Intermediate CA (Online)      │
-│   Validity: 2-5 years           │
+│   Validity: 5 years (default)   │
 │   Private Key: step-ca (Docker) │
 └────────────┬────────────────────┘
              │ Issues
@@ -102,7 +102,7 @@ This PKI uses a **two-tier certificate authority (CA)** architecture with an off
 | **Root Key Security** | Online, exposed to attacks | Offline, air-gapped |
 | **Compromise Recovery** | Must reissue ALL certificates | Only reissue Intermediate + downstream |
 | **Operational Flexibility** | Root must be online 24/7 | Root only needed for Intermediate renewal |
-| **Compliance** | Fails most security audits | Meets PCI DSS, SOC 2, ISO 27001 |
+| **Compliance** | An always-online Root is a finding in most audits | Two tiers are what PCI DSS, SOC 2 and ISO 27001 audits expect of an internal CA |
 
 ### Why Not Three-Tier?
 
@@ -210,7 +210,7 @@ See [CLIENT_TRUST.md](CLIENT_TRUST.md) for detailed installation scripts.
 **Storage Requirements:**
 - ✅ Air-gapped machine (no network connectivity)
 - ✅ Full-disk encryption (LUKS, BitLocker, FileVault)
-- ✅ GPG-encrypted private key (`root_ca_key.pem.gpg`)
+- ✅ GPG-encrypted private key (`root_ca.key.gpg` from the scripts, `root_ca_key.pem.gpg` from the manual path in SETUP.md)
 - ✅ Multiple backups (3-2-1 rule: 3 copies, 2 media types, 1 offsite)
 
 **Access Control:**
@@ -225,21 +225,21 @@ See [CLIENT_TRUST.md](CLIENT_TRUST.md) for detailed installation scripts.
 
 ### Online Intermediate CA
 
-**step-ca Container Security:**
+**step-ca Container Security** (as configured in `config/step-ca-stack.yml`):
 - ✅ Runs as non-root user (`1000:1000`)
-- ⚠️ Writable filesystem (`read_only: false` - required for step-ca database)
-- ✅ Limited capabilities (no `CAP_SYS_ADMIN`)
-- ✅ Private network (no direct internet exposure)
+- ✅ `read_only: true` with a tmpfs on `/tmp`; the database lives in a mounted volume, config and secrets are mounted read-only
+- ✅ Docker's default capability set (no `CAP_SYS_ADMIN`)
+- ✅ Bridge network, ports published to the host only (9200, 9643)
 
 **Access Control:**
-- ✅ TLS-protected Admin API (port 9643)
-- ✅ Client certificate authentication (optional)
-- ✅ Rate limiting (DoS protection)
+- ✅ TLS on the CA API (host port 9643)
+- ⚠️ Provisioner-based authorization is up to your `ca.json`; the example in SETUP.md configures a single ACME provisioner and no client certificate authentication
+- ❌ No rate limiting in this setup. step-ca has none built in, and the compose stack adds none; put a reverse proxy in front if the API is reachable beyond the host
 
 **Monitoring:**
-- ✅ Certificate expiry alerts (Prometheus)
-- ✅ Container health checks (Docker)
-- ✅ CRL distribution monitoring
+- ✅ Certificate expiry alerts (Prometheus, `monitoring/prometheus-rules.yml`)
+- ✅ Container liveness (`step_ca_container_up`, plus the Docker healthcheck)
+- ❌ No CRL monitoring, because this setup produces no working CRL (see the revocation box at the top)
 
 ---
 
@@ -265,13 +265,15 @@ This PKI supports **two certificate issuance workflows**:
 
 1. **ACME Client** - certbot/acme.sh requests certificate from step-ca API
 2. **Validation** - HTTP-01 or DNS-01 challenge
-3. **Signing** - step-ca signs and registers in BadgerDB
+3. **Signing** - step-ca signs and registers the certificate in BadgerDB
 4. **Distribution** - ACME client writes certificate to configured path
 
-**Pros**: Fully automated, certificates in database, OCSP support, standard revocation
+**Pros**: Fully automated, certificates in the database, `step ca revoke` works, CRL available
 **Cons**: Requires running container, more complex setup
 
-> **Design Decision**: The default workflow uses OpenSSL signing for simplicity and offline capability. The step-ca container is provided for users who want ACME automation or need OCSP/revocation features. Both workflows use the same Intermediate CA.
+> **Design Decision**: The default workflow uses OpenSSL signing for simplicity and offline capability. The step-ca container is there for users who want ACME automation and certificates that the CA knows about. Both workflows use the same Intermediate CA.
+>
+> **Untested here**: everything in this repository (renewal script, monitoring, examples) is built around Workflow A. Workflow B is a supported step-ca feature, but no script, timer or example in this repository exercises it, and step-ca has no OCSP responder in any case (Smallstep offers CRL only; OCSP is part of their commercial Certificate Manager).
 
 **Note**: This setup uses a **Two-Tier PKI architecture**:
 - **Root CA**: Fully offline (air-gapped, encrypted backup, only used for signing Intermediate CA)
@@ -289,7 +291,8 @@ The Root CA private key NEVER touches the production server. The Intermediate CA
 
 **Manual Renewal:**
 ```bash
-sudo SERVICE_NAME=myservice /usr/local/bin/renew-service-cert.sh
+# Renews only below the threshold; --force re-issues regardless
+sudo SERVICE_NAME=myservice /usr/local/bin/renew-service-cert.sh --force
 ```
 
 ### Revocation
@@ -383,7 +386,7 @@ See [NGINX_TLS.md](NGINX_TLS.md) for detailed configuration.
 - Physical security breach
 
 **Recovery Steps:**
-1. **Immediately**: Revoke Intermediate CA certificate
+1. **Immediately**: stop issuing from the current chain and plan the trust-anchor swap. There is no working revocation here (see the box at the top), so the old Root stays trusted on every client until you remove it there
 2. **Generate new Root CA** (entirely new key pair)
 3. **Reissue Intermediate CA** from new Root
 4. **Redistribute new Root CA** to all clients (trust anchor update)
@@ -404,8 +407,8 @@ See [NGINX_TLS.md](NGINX_TLS.md) for detailed configuration.
 2. **Revoke compromised Intermediate CA** (using offline Root CA)
 3. **Issue new Intermediate CA** from Root
 4. **Deploy new Intermediate CA** to step-ca
-5. **Reissue service certificates** (old certs still valid but should rotate)
-6. **Update CRL** with revoked certificates
+5. **Reissue service certificates** (old ones stay valid until they expire; rotate the keys, don't just re-sign them)
+6. **Remove the old Intermediate** from every fullchain file and reload the services that serve it
 
 **Downtime**: 30-60 minutes (clients keep using existing certs)
 
@@ -418,11 +421,12 @@ See [NGINX_TLS.md](NGINX_TLS.md) for detailed configuration.
 
 **Recovery:**
 1. **Restore from backup** (see [BACKUP.md](BACKUP.md))
-2. **Verify Intermediate CA cert/key integrity**
+2. **Verify Intermediate CA cert/key integrity** (`openssl verify -CAfile root_ca.crt intermediate_ca.crt`)
 3. **Restart step-ca container**
-4. **Test certificate issuance** (dry-run)
+4. **Issue a throwaway certificate** and check it against the chain
 
-**Prevention**: Daily automated backups to `/opt/backups/` + offsite rsync
+**Prevention**: a daily backup job plus an offsite copy. The repository ships no
+backup script; [BACKUP.md](BACKUP.md) has one to copy, along with its timer.
 
 ---
 
@@ -455,13 +459,20 @@ See [NGINX_TLS.md](NGINX_TLS.md) for detailed configuration.
 
 ## Compliance Mapping
 
-| Standard | Requirement | Implementation |
-|----------|-------------|----------------|
-| **PCI DSS 4.1** | Strong cryptography for transmission | TLS 1.2+, ECDHE ciphers |
-| **PCI DSS 4.2** | Never use default keys | Unique keys per service |
-| **SOC 2 CC6.6** | Logical access controls | TLS client certs, key-based auth |
-| **ISO 27001 A.10.1** | Cryptographic controls | 2048-bit RSA / 256-bit ECDSA |
-| **NIST 800-53 SC-8** | Confidentiality/integrity | TLS 1.3, certificate pinning |
+What a PKI like this contributes to an audit, and what it does not. Nothing
+here has been audited; the right-hand column names the artefact an auditor would
+be shown.
+
+| Standard | Requirement | What this setup provides |
+|----------|-------------|--------------------------|
+| **PCI DSS 4.2.1** | Strong cryptography for transmission over open networks | Certificates for internal TLS; the cipher configuration is nginx's, see [NGINX_TLS.md](NGINX_TLS.md) |
+| **SOC 2 CC6.1** | Logical access controls | Per-service key pairs, Root key offline, Intermediate key readable only by UID 1000 |
+| **ISO 27001 A.8.24** | Use of cryptography | ECDSA P-384 Root, P-256 Intermediate and leaf keys, documented key lifecycle |
+| **NIST 800-53 SC-12** | Cryptographic key establishment and management | Documented creation, storage, renewal and backup of both CA keys |
+| **NIST 800-53 SC-8** | Transmission confidentiality | TLS between clients and services; no certificate pinning is implemented |
+
+Not covered: revocation (SC-12 expects it, this setup has none), key escrow,
+HSM-backed storage, and any form of audit logging around key usage.
 
 ---
 

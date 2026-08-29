@@ -4,7 +4,7 @@ Best practices for TLS termination with step-ca certificates in nginx reverse pr
 
 ## ⚡ TL;DR
 
-nginx mit step-ca Zertifikaten: fullchain.pem + key.pem, TLS 1.3/1.2, HSTS aktivieren, OCSP Stapling einrichten, Auto-Reload bei Cert-Renewal.
+nginx with step-ca certificates: serve the fullchain plus the key, TLS 1.3 and 1.2, HSTS on, and a reload after every renewal. OCSP stapling is not available here - step-ca has no OCSP responder.
 
 ---
 
@@ -15,7 +15,7 @@ nginx mit step-ca Zertifikaten: fullchain.pem + key.pem, TLS 1.3/1.2, HSTS aktiv
 - [Basic TLS Configuration](#basic-tls-configuration)
 - [Mozilla SSL Configuration Generator](#mozilla-ssl-configuration-generator)
 - [Security Headers](#security-headers)
-- [OCSP Stapling](#ocsp-stapling)
+- [OCSP Stapling: not available here](#ocsp-stapling-not-available-here)
 - [Certificate Auto-Reload](#certificate-auto-reload)
 - [Proxy Configuration Patterns](#proxy-configuration-patterns)
 - [Rate Limiting](#rate-limiting)
@@ -38,6 +38,11 @@ Before configuring nginx TLS termination:
 - ✅ Certificate files in `/etc/ssl/step-ca/`:
   - `service-fullchain.crt` (server cert + intermediate CA)
   - `service.key` (private key, chmod 600)
+
+> **nginx 1.25.1 and newer**: `listen 443 ssl http2;` still works but is
+> deprecated and logs a warning. Write `listen 443 ssl;` plus a separate
+> `http2 on;` in the server block. The examples below keep the old form because
+> it is what Debian 12 ships (nginx 1.22).
 
 ---
 
@@ -161,8 +166,10 @@ add_header X-Content-Type-Options "nosniff" always;
 # Clickjacking protection
 add_header X-Frame-Options "SAMEORIGIN" always;
 
-# XSS protection (legacy, still useful for old browsers)
-add_header X-XSS-Protection "1; mode=block" always;
+# X-XSS-Protection: Chrome, Edge and Safari removed the auditor this header
+# controls, and Firefox never had it. It does nothing on a current browser;
+# keep it only if a compliance checklist demands it.
+# add_header X-XSS-Protection "1; mode=block" always;
 
 # Referrer policy (don't leak URLs to external sites)
 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
@@ -189,34 +196,27 @@ add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment
 
 ---
 
-## OCSP Stapling
+## OCSP Stapling: not available here
 
-**What**: Server fetches OCSP response from CA, staples to TLS handshake (reduces client latency).
+**What it would do**: the server fetches an OCSP response from the CA and staples
+it to the TLS handshake, so the client does not have to ask the CA itself.
 
-### step-ca OCSP Support
+**Why it does not apply**: step-ca has no OCSP responder. Smallstep's
+documentation says so plainly - the built-in revocation support is a minimal CRL
+server, and OCSP is part of their commercial Certificate Manager. On top of that,
+the default workflow in this repository signs certificates with OpenSSL, so they
+carry no OCSP URL in an Authority Information Access extension for a client to
+call.
 
-**Status**: step-ca supports OCSP responder (as of v0.22.0+).
-
-**Configuration**:
-
-```nginx
-ssl_stapling on;
-ssl_stapling_verify on;
-ssl_trusted_certificate /etc/ssl/step-ca/root_ca.crt;
-
-# OCSP resolver
-resolver 8.8.8.8 8.8.4.4 valid=300s;
-resolver_timeout 5s;
-```
-
-**Verify OCSP stapling**:
+Turning `ssl_stapling on;` anyway is not an error: nginx logs a warning that no
+OCSP responder is available and serves the handshake without a stapled response.
+It buys nothing, so leave it off and rely on the short 90-day lifetime instead.
 
 ```bash
-echo | openssl s_client -connect service.internal:443 -status 2>&1 | grep "OCSP Response Status"
-# Expected: "OCSP Response Status: successful (0x0)"
+# What a client sees today:
+echo | openssl s_client -connect service.internal:443 -status 2>&1 | grep -i "OCSP"
+# "OCSP response: no response sent"
 ```
-
-**Note**: If step-ca OCSP responder is not configured, OCSP stapling will silently fail (non-fatal).
 
 ---
 
@@ -527,20 +527,15 @@ nginx -s reload
 systemctl reload nginx
 ```
 
-### OCSP Stapling Fails
+### `ssl_stapling` Has No Effect
 
-**Symptoms**: `ssl_stapling` enabled but OCSP response not sent.
+**Symptoms**: `ssl_stapling on;` is configured, but no OCSP response is stapled,
+and the error log shows `"ssl_stapling" ignored, no OCSP responder URL in the certificate`.
 
-**Cause**: step-ca OCSP responder not configured, or nginx can't reach it.
+**Cause**: expected. step-ca provides no OCSP responder, and OpenSSL-signed
+certificates carry no OCSP URL. See [OCSP Stapling: not available here](#ocsp-stapling-not-available-here).
 
-**Fix**:
-```bash
-# Check step-ca OCSP endpoint
-curl -k https://step-ca.internal:9643/.well-known/est/cacerts
-
-# Check nginx error log
-grep -i ocsp /var/log/nginx/error.log
-```
+**Fix**: remove the `ssl_stapling` directives.
 
 ### WebSocket Connection Drops
 
@@ -568,7 +563,6 @@ location /websocket {
 - ✅ Security headers (CSP, X-Frame-Options, etc.) → [Security Headers](#security-headers)
 
 **Operational**:
-- ✅ OCSP stapling (if step-ca supports) → [OCSP Stapling](#ocsp-stapling)
 - ✅ Rate limiting (login endpoints) → [Rate Limiting](#basic-rate-limit)
 - ✅ Auto-reload after certificate renewal → [Certificate Auto-Reload](#certificate-auto-reload)
 
